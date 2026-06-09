@@ -1,0 +1,67 @@
+volumes:
+  grafana_data:
+    driver: local
+
+networks:
+  dainet:
+    driver: bridge
+
+services:
+  # ────────────────────────────────────────────────
+  # Data Cleaning and Processing Application
+  # ────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: data-insight-engine
+    env_file: .env
+    #volumes:
+      # Mount the network drive volumes containing data to be processed
+    depends_on:
+      prefect:
+        condition: service_healthy # Wait for prefect to be ready
+    networks:
+      - dainet
+    restart: unless-stopped
+  
+  # ────────────────────────────────────────────────
+  # Prefect Server for Orchestration and Scheduling
+  # ────────────────────────────────────────────────
+  prefect:
+    build:
+      context: .
+      dockerfile: docker/prefect/Dockerfile
+    container_name: prefect
+    ports:
+      - "4200:4200" # Prefect UI at localhost:4200
+    environment:
+      - PREFECT_TELEMETRY_ENABLED=false
+      - PREFECT_UI_API_URL=http://localhost:4200/api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dainet
+    restart: unless-stopped
+  
+  # ────────────────────────────────────────────────
+  # Grafana for Monitoring and Visualization
+  # ────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000" # Grafana UI at localhost:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - dainet
+    restart: unless-stopped
