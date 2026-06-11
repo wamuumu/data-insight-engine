@@ -2,11 +2,19 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from logger import LOG_DIR
+from common.logging import LOG_DIR
 from ingestion.crawler.drive import DriveCrawler
 from ingestion.registry import get_parser
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class PipelineError:
+    """
+    Represents an error that occurred during the ingestion pipeline execution.
+    """
+    file_path: Path
+    error_message: str
 
 @dataclass
 class PipelineStats:
@@ -18,7 +26,7 @@ class PipelineStats:
     files_skipped: int = 0
     files_failed: int = 0
     records_produced: int = 0
-    errors: list[str] = field(default_factory=list)
+    errors: list[PipelineError] = field(default_factory=list)
 
 class IngestionPipeline:
     """
@@ -57,7 +65,7 @@ class IngestionPipeline:
             except Exception as e:
                 logger.error(f"Error occurred while parsing file: {file.path}, skipping.")
                 stats.files_failed += 1
-                stats.errors.append(str(e))
+                stats.errors.append(PipelineError(file_path=file.path, error_message=str(e)))
                 continue
         
         logger.info(f"Ingestion completed. Stats: {stats}")

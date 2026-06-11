@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
 class Settings(BaseSettings):
     """
@@ -14,7 +14,10 @@ class Settings(BaseSettings):
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",     
         extra="ignore",             # Ignore unknown fields in .env
-    )  
+    )
+
+    # ── PARSING ────────────────────────────────────────────────
+    parquet_batch_size: int = Field(default=100, description="Number of rows to read at a time when parsing Parquet files")
 
     # ── Logging ────────────────────────────────────────────────
     log_level: str = Field(default="INFO", description="Logging verbosity level")
@@ -33,8 +36,7 @@ def load_settings() -> Settings:
     Load and validate settings from environment variables. Exits on validation errors.
     """
     try:
-        settings = Settings()
-        return settings
+        return Settings()
     except Exception as e:
         print(f"Error loading settings: {e}")
         exit(1)

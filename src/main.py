@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
 
-from logger import setup_logging
 from config import load_settings
+from common.logging import setup_logging
 from ingestion.pipeline import IngestionPipeline
 
 # Load settings

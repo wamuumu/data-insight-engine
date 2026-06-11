@@ -1,12 +1,11 @@
 import logging
-from logging import Logger
+import shutil
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-import shutil
 
-LOG_DIR = Path(__file__).parent / "logs"
+LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
-def setup_logging(log_level: str) -> Logger:
+def setup_logging(log_level: str) -> logging.Logger:
     """
     Set up logging configuration with a rotating file handler.
     """
@@ -22,7 +21,7 @@ def setup_logging(log_level: str) -> Logger:
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%d-%m-%Y %H:%M:%S")
 
     # File handler 
-    file_handler = RotatingFileHandler(LOG_DIR / "system.log", maxBytes=10*1024*1024, backupCount=5)
+    file_handler = RotatingFileHandler(LOG_DIR / "system.log")
     file_handler.setFormatter(formatter)
     file_handler.setLevel(log_level)
 
@@ -34,8 +33,6 @@ def setup_logging(log_level: str) -> Logger:
     # Add handlers to the logger
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
-
-    logging.info(f"Logging initialized with level: {log_level}, logs will be stored in: {LOG_DIR}")
 
     # Return a logger instance for the specified name
     return logger

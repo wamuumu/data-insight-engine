@@ -3,18 +3,18 @@ from typing import Generator
 
 import pyarrow.parquet as pq
 
+from config import load_settings
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, ParsedRecord
+
+settings = load_settings()
 
 logger = logging.getLogger(__name__)
 
 class ParquetParser(BaseParser):
     """
-    Parser for Parquet files.
+    Parser for Parquet Special Event files.
     """
-
-    # Rows per chunk when reading Parquet files to manage memory usage
-    BATCH_SIZE = 10
 
     def can_handle(self, file: BaseFile) -> bool:
         """
@@ -39,7 +39,7 @@ class ParquetParser(BaseParser):
             f"Number of row groups: {parquet_file.num_row_groups}, "
         )
 
-        for batch in parquet_file.iter_batches(batch_size=self.BATCH_SIZE):
+        for batch in parquet_file.iter_batches(batch_size=settings.parquet_batch_size):
             df = batch.to_pydict()
             num_rows = len(next(iter(df.values())))
 

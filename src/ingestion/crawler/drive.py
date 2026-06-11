@@ -3,12 +3,9 @@ from pathlib import Path
 from typing import Generator
 
 from ingestion.crawler.base import BaseCrawler, BaseFile
+from common.constants import SUPPORTED_EXTENSIONS
 
 logger = logging.getLogger(__name__)
-
-# Supported extensions for crawling (history logs as excel, parquet files for raw data)
-SUPPORTED_EXTENSIONS = {'.xlsx', '.parquet'}
-
 class DriveCrawler(BaseCrawler):
     """
     Crawler for local/network drive. Recursively searches for files with supported extensions.
