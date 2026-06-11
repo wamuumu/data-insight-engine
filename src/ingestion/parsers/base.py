@@ -1,18 +1,27 @@
 from abc import ABC, abstractmethod
-from typing import Generator, Any
+from typing import Generator, Any, Union
 
-class ParsedRecord:
+class HistoryLogRecord:
     """
-    Minimal container for a single parsed record.
-    To be replaced once a proper DB schema is defined.
+    Container for a history log record.
     """
-    def __init__(self, source_file: str, record_type: str, data: dict[str, Any]):
+    def __init__(self, source_file: str, data: dict[str, Any]):
         self.source_file = source_file
-        self.record_type = record_type
         self.data = data
     
     def __repr__(self):
-        return f"ParsedRecord(source_file={self.source_file}, record_type={self.record_type}, data={self.data})"
+        return f"HistoryLogRecord(source_file={self.source_file}, data={self.data})"
+
+class RawDataRecord:
+    """
+    Container for a raw data record.
+    """
+    def __init__(self, source_file: str, data: dict[str, Any]):
+        self.source_file = source_file
+        self.data = data
+    
+    def __repr__(self):
+        return f"RawDataRecord(source_file={self.source_file}, data={self.data})"
 
 class BaseParser(ABC):
     """
@@ -26,8 +35,8 @@ class BaseParser(ABC):
         ...
     
     @abstractmethod
-    def parse(self, file) -> Generator[ParsedRecord, None, None]:
+    def parse(self, file) -> Generator[Union[HistoryLogRecord, RawDataRecord], None, None]:
         """
-        Parse the given file and yield ParsedRecord instances.
+        Parse the given file and yield record instances (either HistoryLogRecord or RawDataRecord).
         """
         ...

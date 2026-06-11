@@ -5,7 +5,7 @@ import pyarrow.parquet as pq
 
 from config import load_settings
 from ingestion.crawler.base import BaseFile
-from ingestion.parsers.base import BaseParser, ParsedRecord
+from ingestion.parsers.base import BaseParser, RawDataRecord
 
 settings = load_settings()
 
@@ -22,7 +22,7 @@ class ParquetParser(BaseParser):
         """
         return file.suffix == ".parquet"
     
-    def parse(self, file: BaseFile) -> Generator[ParsedRecord, None, None]:
+    def parse(self, file: BaseFile) -> Generator[RawDataRecord, None, None]:
         """
         Parse the Parquet file and yield records as dictionaries.
         """
@@ -45,6 +45,6 @@ class ParquetParser(BaseParser):
 
             for i in range(num_rows):
                 record = {col: df[col][i] for col in df}
-                yield ParsedRecord(source_file=file.path, record_type="raw_data", data=record)
+                yield RawDataRecord(source_file=file.path, data=record)
             
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     """
@@ -18,6 +18,13 @@ class Settings(BaseSettings):
 
     # ── PARSING ────────────────────────────────────────────────
     parquet_batch_size: int = Field(default=100, description="Number of rows to read at a time when parsing Parquet files")
+
+    # ── DATABASE ───────────────────────────────────────────────
+    db_url: str = Field(..., description="SQLAlchemy database URL for connecting to the PostgreSQL database")
+    db_user: str = Field(..., description="Database username for authentication")
+    db_password: str = Field(..., description="Database password for authentication")
+    db_name: str = Field(..., description="Name of the PostgreSQL database to connect to")
+    db_batch_size: int = Field(default=100, description="Number of records to insert into the database in a single batch")
 
     # ── Logging ────────────────────────────────────────────────
     log_level: str = Field(default="INFO", description="Logging verbosity level")

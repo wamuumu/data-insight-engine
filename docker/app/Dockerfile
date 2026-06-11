@@ -15,5 +15,4 @@ RUN bash install_requirements.sh && rm install_requirements.sh
 # Copy source code
 COPY src/ ./src/
 
-# Set entry point to run the application
-CMD ["python3", "src/main.py"]
+CMD ["sleep", "infinity"]

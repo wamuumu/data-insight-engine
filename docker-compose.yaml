@@ -1,6 +1,8 @@
 volumes:
   grafana_data:
     driver: local
+  postgres_data:
+    driver: local
 
 networks:
   dainet:
@@ -11,27 +13,50 @@ services:
   # Data Cleaning and Processing Application
   # ────────────────────────────────────────────────
   app:
-    build:
-      context: .
-      dockerfile: docker/app/Dockerfile
+    image: data-insight-engine:latest
     container_name: data-insight-engine
     env_file: .env
-    #volumes:
-      # Mount the network drive volumes containing data to be processed
+    volumes:
+      - ./src:/app/src # Mount source code with read-only access
+      - /mnt/c/Users/CostaloM/Desktop/test:/data:ro # Mount local directory with read-only access
     depends_on:
       prefect:
         condition: service_healthy # Wait for prefect to be ready
+      postgres:
+        condition: service_healthy # Wait for postgres to be ready
     networks:
       - dainet
     restart: unless-stopped
   
   # ────────────────────────────────────────────────
+  # PostgreSQL Database for Storing Processed Data
+  # ────────────────────────────────────────────────
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    env_file: .env
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dainet
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────────
   # Prefect Server for Orchestration and Scheduling
   # ────────────────────────────────────────────────
   prefect:
-    build:
-      context: .
-      dockerfile: docker/prefect/Dockerfile
+    image: data-insight-prefect:latest
     container_name: prefect
     ports:
       - "4200:4200" # Prefect UI at localhost:4200

@@ -6,7 +6,7 @@ import openpyxl
 from openpyxl import Workbook
 
 from ingestion.crawler.base import BaseFile
-from ingestion.parsers.base import BaseParser, ParsedRecord
+from ingestion.parsers.base import BaseParser, HistoryLogRecord
 from common.utils import extract_serial_number
 from common.constants import SWITCH_ON_EVENT_ID, SWITCH_OFF_EVENT_ID, UNDEFINED_FIRMWARE_VERSION
 
@@ -25,7 +25,7 @@ class XLSXParser(BaseParser):
         """
         return file.suffix == ".xlsx"
     
-    def parse(self, file: BaseFile) -> Generator[ParsedRecord, None, None]:
+    def parse(self, file: BaseFile) -> Generator[HistoryLogRecord, None, None]:
         """
         Parse the XLSX file and yield records as dictionaries.
         """
@@ -82,7 +82,7 @@ class XLSXParser(BaseParser):
                     record_data["Serial Number"] = sn
                     record_data["Firmware Version"] = firmware_lookup(abs_row_index)
 
-                    yield ParsedRecord(source_file=file.path, record_type="history_log", data=record_data)
+                    yield HistoryLogRecord(source_file=file.path, data=record_data)
 
                     abs_row_index += 1
         finally:
