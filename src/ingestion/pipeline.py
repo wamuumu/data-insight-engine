@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from logger import LOG_DIR
 from ingestion.crawler.drive import DriveCrawler
 from ingestion.registry import get_parser
 
@@ -45,10 +46,10 @@ class IngestionPipeline:
             try:
                 for record in parser.parse(file):
                     if record.record_type == "raw_data":
-                        with open("logs/raw.log", "a") as f:
+                        with open(LOG_DIR / "raw.log", "a") as f:
                             f.write(f"{record.data}\n")
                     else:
-                        with open("logs/history.log", "a") as f:
+                        with open(LOG_DIR / "history.log", "a") as f:
                             f.write(f"{record.data}\n")
                     stats.records_produced += 1
                 

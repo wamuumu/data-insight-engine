@@ -4,12 +4,13 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import shutil
 
-def setup_logging(log_level: str, log_dir: str = "logs") -> Logger:
+LOG_DIR = Path(__file__).parent / "logs"
+
+def setup_logging(log_level: str) -> Logger:
     """
     Set up logging configuration with a rotating file handler.
     """
     # Create logs directory if it doesn't exist, or clear it if it does
-    LOG_DIR = Path(log_dir)
     if LOG_DIR.exists():
         shutil.rmtree(LOG_DIR)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -33,6 +34,8 @@ def setup_logging(log_level: str, log_dir: str = "logs") -> Logger:
     # Add handlers to the logger
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+
+    logging.info(f"Logging initialized with level: {log_level}, logs will be stored in: {LOG_DIR}")
 
     # Return a logger instance for the specified name
     return logger

@@ -1,3 +1,4 @@
+import re
 import logging
 from typing import Generator
 
@@ -30,6 +31,10 @@ class XLSXParser(BaseParser):
         Parse the XLSX file and yield records as dictionaries.
         """
         logger.info(f"Parsing XLSX file: {file.path} (size: {file.size / 1e6:.2f} MB)")
+
+        # Extract SN from filename using regex (e.g., "B" followed by 8 hexadecimal characters)
+        sn_match = re.search(r"(B[0-9A-F]{8})", str(file.path))
+        sn = sn_match.group() if sn_match else None
         
         try:
             workbook = openpyxl.load_workbook(file.path, read_only=True, data_only=True)
@@ -53,6 +58,7 @@ class XLSXParser(BaseParser):
                     continue  # Skip empty rows
 
                 record_data = dict(zip(header, row))
+                record_data["Serial Number"] = sn
 
                 yield ParsedRecord(source_file=file.path, record_type="history_log", data=record_data)
         
