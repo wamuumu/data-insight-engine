@@ -2,6 +2,8 @@
 
 set -e
 
-# Install dependecies [if any]
+# Install system dependencies
 apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpq-dev \
     && rm -rf /var/lib/apt/lists/*

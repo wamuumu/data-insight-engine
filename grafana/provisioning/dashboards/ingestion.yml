@@ -1,0 +1,109 @@
+{
+  "title": "Data Insight Engine — Ingestion",
+  "uid": "die-ingestion",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Records Ingested / sec",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(die_records_ingested_total[5m])) by (table)",
+          "legendFormat": "{{ table }}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Files Processed / hour",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(die_files_processed_total[1h])) by (status, file_type)",
+          "legendFormat": "{{ file_type }} — {{ status }}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "File Processing Duration p95 (seconds)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(die_file_processing_duration_seconds_bucket[10m])) by (le, file_type))",
+          "legendFormat": "p95 — {{ file_type }}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Time Since Last Pipeline Run",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "unit": "s" },
+      "targets": [
+        {
+          "expr": "time() - die_pipeline_last_run_timestamp_seconds",
+          "legendFormat": "seconds ago"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Pipeline Currently Active",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "die_pipeline_active",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "PostgreSQL Database Size",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "pg_database_size_bytes",
+          "legendFormat": "{{ datname }}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 7,
+      "title": "Total Files Processed (all time)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 16, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(die_files_processed_total{status='done'})",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Total Files Failed (all time)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 16, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(die_files_processed_total{status='failed'})",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "red", "mode": "fixed" } } }
+    }
+  ]
+}

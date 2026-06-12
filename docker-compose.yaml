@@ -3,25 +3,27 @@ volumes:
     driver: local
   postgres_data:
     driver: local
+  prometheus_data:
+    driver: local
 
 networks:
   dainet:
     driver: bridge
 
 services:
+
   # ────────────────────────────────────────────────
-  # Data Cleaning and Processing Application
+  # ETL Application - Core Data Processing Engine
   # ────────────────────────────────────────────────
   app:
     image: data-insight-engine:latest
     container_name: data-insight-engine
     env_file: .env
     volumes:
-      - ./src:/app/src # Mount source code with read-only access
       - /mnt/c/Users/CostaloM/Desktop/test:/data:ro # Mount local directory with read-only access
+    ports:
+      - "8000:8000" # Expose app on localhost:8000 for Prometheus scraping
     depends_on:
-      prefect:
-        condition: service_healthy # Wait for prefect to be ready
       postgres:
         condition: service_healthy # Wait for postgres to be ready
     networks:
@@ -29,14 +31,13 @@ services:
     restart: unless-stopped
   
   # ────────────────────────────────────────────────
-  # PostgreSQL Database for Storing Processed Data
+  # PostgreSQL - Primary Data Source and Storage
   # ────────────────────────────────────────────────
   postgres:
     image: postgres:17
     container_name: postgres
     ports:
       - "5432:5432"
-    env_file: .env
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
@@ -53,21 +54,34 @@ services:
     restart: unless-stopped
 
   # ────────────────────────────────────────────────
-  # Prefect Server for Orchestration and Scheduling
+  # Postgres Exporter - Metrics for Prometheus
   # ────────────────────────────────────────────────
-  prefect:
-    image: data-insight-prefect:latest
-    container_name: prefect
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
     ports:
-      - "4200:4200" # Prefect UI at localhost:4200
+      - "9090:9090" # Prometheus UI at localhost:9090
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    networks:
+      - dainet
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────────
+  # Postgres Exporter - Metrics for Prometheus
+  # ────────────────────────────────────────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
     environment:
-      - PREFECT_TELEMETRY_ENABLED=false
-      - PREFECT_UI_API_URL=http://localhost:4200/api
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - DATA_SOURCE_NAME=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for postgres to be ready
     networks:
       - dainet
     restart: unless-stopped
@@ -87,6 +101,8 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
     networks:
       - dainet
     restart: unless-stopped

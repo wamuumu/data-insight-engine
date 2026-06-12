@@ -1,0 +1,39 @@
+groups:
+  - name: data-insight-engine
+    rules:
+
+      # Fire if the pipeline has not completed a run in over 25 hours (90000 seconds)
+      # Cathes silent scheduler failures, contaienr crashes, or other issues preventing pipeline execution
+      - alert: PipelineNotRunning
+        expr: time() - die_pipeline_last_run_timestamp_seconds > 90000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Data pipeline has not completed a run in over 25 hours"
+          description: "Last run was {{ $value | humanizeDuration }} ago."
+      
+      # Fire if more than 10% of file processed in the past hour are failures
+      # Indicates potential data quality issues, processing errors, or upstream data problems
+      - alert: HighFileFailureRate
+        expr: >
+          rate(die_files_processed_total{status="failure"}[1h]) /
+          rate(die_files_processed_total[1h]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High file failure rate in the past hour"
+          description: "More than 10% of files processed in the past hour have failed."
+      
+      # Fire if PostgreSQL database size exceeds 100 GB (adjust threshold as needed)
+      - alert: PostgresDiskUsageHigh
+        expr: pg_database_size_bytes > 1e11
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL disk usage is high"
+          description: "Database size is {{ $value | humanize1024 }}B."
+
+
