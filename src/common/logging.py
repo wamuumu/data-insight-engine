@@ -1,38 +1,35 @@
 import logging
-import shutil
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
+import sys
 
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+import structlog
 
-def setup_logging(log_level: str) -> logging.Logger:
+def setup_logging(log_level: str):
     """
-    Set up logging configuration with a rotating file handler.
+    Configure structured JSON-formatted logging for the application.
     """
-    # Create logs directory if it doesn't exist, or clear it if it does
-    if LOG_DIR.exists():
-        shutil.rmtree(LOG_DIR)
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=log_level,
+    )
 
-    logger = logging.getLogger()
-    logger.setLevel(log_level)
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
 
-    # Logging format
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s", datefmt="%d-%m-%Y %H:%M:%S")
-
-    # File handler 
-    file_handler = RotatingFileHandler(LOG_DIR / "system.log")
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(log_level)
-
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(log_level)
-
-    # Add handlers to the logger
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-
-    # Return a logger instance for the specified name
-    return logger
+def get_logger(name: str) -> structlog.stdlib.BoundLogger:
+    """Return a named structlog logger."""
+    return structlog.get_logger(name)   
