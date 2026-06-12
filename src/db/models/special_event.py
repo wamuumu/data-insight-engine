@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, Boolean, DateTime, Double, Float, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db.models.base import Base
+from db.models.base import BaseModel
 
 
-class SpecialEvent(Base):
+class SpecialEvent(BaseModel):
     __tablename__ = "special_event"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

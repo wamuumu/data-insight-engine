@@ -2,10 +2,11 @@ import logging
 from pathlib import Path
 from typing import Generator
 
-from ingestion.crawler.base import BaseCrawler, BaseFile
 from common.constants import SUPPORTED_EXTENSIONS
+from ingestion.crawler.base import BaseCrawler, BaseFile
 
 logger = logging.getLogger(__name__)
+
 class DriveCrawler(BaseCrawler):
     """
     Crawler for local/network drive. Recursively searches for files with supported extensions.
@@ -22,7 +23,7 @@ class DriveCrawler(BaseCrawler):
         """
         Recursively crawl the root directory and yield BaseFile instances for supported files.
         """
-        logger.info(f"Starting crawl at {self.root}")
+        logger.info("Starting crawl", extra={"root": str(self.root)})
         discovered_files = 0
         skipped_files = 0
 
@@ -35,7 +36,7 @@ class DriveCrawler(BaseCrawler):
                 continue
             
             discovered_files += 1
-            logger.debug(f"Discovered file: {path}")
+            logger.debug("Discovered file", extra={"file": str(path)})
             yield BaseFile(path)
 
-        logger.info(f"Crawl completed. Discovered: {discovered_files}, Skipped: {skipped_files}")
+        logger.info("Crawl completed", extra={"discovered": discovered_files, "skipped": skipped_files})

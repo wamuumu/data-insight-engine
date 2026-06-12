@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, Date, Time, DateTime, Integer, String, UniqueConstraint, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db.models.base import Base
+from db.models.base import BaseModel
 
 
-class HistoryLog(Base):
+class HistoryLog(BaseModel):
     __tablename__ = "history_log"
     __table_args__ = (
         UniqueConstraint(

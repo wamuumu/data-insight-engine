@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from db.models.base import Base
+from db.models.base import BaseModel
 
 
-class FileTracker(Base):
+class FileTracker(BaseModel):
     __tablename__ = "file_tracker"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

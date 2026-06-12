@@ -4,19 +4,20 @@ from dateutil.parser import parse as dateutil_parse
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from db.repositories.base import Base
+from db.repositories.base import BaseRepository
 from db.models.history_log import HistoryLog
 from ingestion.parsers.base import HistoryLogRecord
 
 logger = logging.getLogger(__name__)
 
 
-class HistoryLogRepository(Base[HistoryLog]):
-    def __init__(self, session: Session):
-        super().__init__(HistoryLog, session)
+class HistoryLogRepository(BaseRepository[HistoryLog]):
+    def __init__(self):
+        super().__init__(HistoryLog)
 
     def upsert_history_logs(
         self,
+        session: Session,
         records: list[HistoryLogRecord],
         source_file_id: int | None = None
     ) -> int:
@@ -33,15 +34,15 @@ class HistoryLogRepository(Base[HistoryLog]):
             .values(rows)
             .on_conflict_do_nothing(constraint="uq_history_log_entry")            
         )
-        result = self.session.execute(stmt)
+        result = session.execute(stmt)
         return result.rowcount
 
     def _history_log_to_row(self, record: HistoryLogRecord, source_file_id: int | None) -> dict:
         """
         Convert a HistoryLogRecord to a dictionary suitable for database insertion.
         """
-        raw_date: str = record.data.get("date")
-        raw_time: str = record.data.get("time")
+        raw_date: str = record.data.get("event_date")
+        raw_time: str = record.data.get("event_time")
 
         try:
             parsed_date = dateutil_parse(raw_date, dayfirst=True).date()

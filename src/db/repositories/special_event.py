@@ -3,19 +3,20 @@ import logging
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from db.repositories.base import Base
+from db.repositories.base import BaseRepository
 from db.models.special_event import SpecialEvent
 from ingestion.parsers.base import SpecialEventRecord
 
 logger = logging.getLogger(__name__)
 
 
-class SpecialEventRepository(Base[SpecialEvent]):
-    def __init__(self, session: Session):
-        super().__init__(SpecialEvent, session)
+class SpecialEventRepository(BaseRepository[SpecialEvent]):
+    def __init__(self):
+        super().__init__(SpecialEvent)
 
     def upsert_special_events(
         self,
+        session: Session,
         records: list[SpecialEventRecord],
         source_file_id: int | None = None
     ) -> int:
@@ -26,7 +27,7 @@ class SpecialEventRepository(Base[SpecialEvent]):
             return 0
         
         rows = [self._special_event_to_row(r, source_file_id) for r in records]
-        result = self.session.execute(insert(SpecialEvent).values(rows))
+        result = session.execute(insert(SpecialEvent).values(rows))
         return result.rowcount
 
     def _special_event_to_row(self, record: SpecialEventRecord, source_file_id: int | None) -> dict:
