@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     file_parser.set_defaults(func=handle_file)
 
     # ── scheduler ───────────────────────────────────
-    scheduler_parser = subparsers.add_parser("scheduler", help="Start the scheduler and run ingestion at configured intervals")
+    scheduler_parser = subparsers.add_parser("schedule", help="Start the scheduler and run ingestion at configured intervals")
     scheduler_parser.add_argument("--time", type=str, help="Time to run the ingestion job (e.g., '02:00:00' for 2 AM daily)")
     scheduler_parser.add_argument("--day-of-week", type=str, help="Day of the week to run the job (e.g., 'mon', 'tue', 'mon-fri', etc.)")
     scheduler_parser.add_argument("--day", type=int, help="Day of the month to run the job")
