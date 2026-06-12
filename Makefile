@@ -30,9 +30,9 @@ build:
 up:
 	@echo "Starting services with Docker Compose"
 	docker compose -p ${PROJECT_NAME} up -d
-	@echo "Grafana     	→ http://localhost:3000"
-	@echo "Prometheus   → http://localhost:9090"
-	@echo "Metrics	 	→ http://localhost:${METRICS_PORT}/metrics"
+	@echo "Grafana       	→ http://localhost:3000"
+	@echo "Prometheus    	→ http://localhost:9090"
+	@echo "Metrics       	→ http://localhost:${METRICS_PORT}/metrics"
 
 down:
 	@echo "Stopping and removing containers"

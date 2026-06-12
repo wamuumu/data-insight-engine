@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select
@@ -18,7 +17,7 @@ from ingestion.crawler.drive import DriveCrawler
 from ingestion.parsers.base import BaseParser, HistoryLogRecord, SpecialEventRecord
 from ingestion.registry import get_parser
 from monitoring.metrics import (
-    files_processing_duration,
+    file_processing_duration,
     files_processed,
     pipeline_active,
     pipeline_last_run,
@@ -139,7 +138,7 @@ class IngestionPipeline:
                 )
                 self.file_tracker_repo.mark_processing(session, tracker)
         
-        with files_processing_duration.labels(file_type=file_type).time():
+        with file_processing_duration.labels(file_type=file_type).time():
             try:
                 inserted, produced = self._stream_file(file, parser, tracker)
                 stats.files_parsed += 1

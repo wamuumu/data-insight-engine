@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # ── Scheduler ──────────────────────────────────────────────
     data_root: str = Field(default="/data", description="Root directory to crawl for data files")
 
+    # ── Metrics ───────────────────────────────────────────────
+    metrics_port: int = Field(..., description="Port to expose Prometheus metrics on")
+
     # ── Logging ────────────────────────────────────────────────
     log_level: str = Field(default="INFO", description="Logging verbosity level")
 

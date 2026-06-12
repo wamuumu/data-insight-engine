@@ -12,7 +12,7 @@ scrape_configs:
   
   - job_name: postgres
     static_configs:
-      -targets: ['postgres_exporter:9187'] # Scrape Postgres exporter metrics
+      - targets: ['postgres_exporter:9187'] # Scrape Postgres exporter metrics
   
   - job_name: prometheus
     static_configs:
