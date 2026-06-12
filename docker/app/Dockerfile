@@ -19,6 +19,3 @@ COPY . /app
 
 # Change ownership to non-root user
 USER appuser
-
-# Entrypoint for the application (can be overridden in docker-compose)
-CMD ["sleep", "infinity"]

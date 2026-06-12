@@ -28,7 +28,6 @@ services:
         condition: service_healthy # Wait for postgres to be ready
     networks:
       - dainet
-    restart: unless-stopped
   
   # ────────────────────────────────────────────────
   # PostgreSQL - Primary Data Source and Storage

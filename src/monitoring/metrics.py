@@ -25,12 +25,10 @@ file_processing_duration = Histogram(
 # ── Pipeline-level gauges ─────────────────────────────────────
 pipeline_last_run = Gauge(
     "die_pipeline_last_run_timestamp_seconds",
-    "Timestamp of the last completed pipeline run. ",
-    "Alert if time() - this value exceeds your schedule interval x 1.5"
+    "Timestamp of the last completed pipeline run."
 )
 
 pipeline_active = Gauge(
     "die_pipeline_active",
-    "Whether the ingestion pipeline is currently running (1) or idle (0). ",
-    "Useful for alerting overlapping runs."
+    "Whether the ingestion pipeline is currently running (1) or idle (0)."
 )
