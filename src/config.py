@@ -16,15 +16,18 @@ class Settings(BaseSettings):
         extra="ignore",             # Ignore unknown fields in .env
     )
 
-    # ── PARSING ────────────────────────────────────────────────
+    # ── Parsing ────────────────────────────────────────────────
     parquet_batch_size: int = Field(default=100, description="Number of rows to read at a time when parsing Parquet files")
 
-    # ── DATABASE ───────────────────────────────────────────────
+    # ── Database ───────────────────────────────────────────────
     db_url: str = Field(..., description="SQLAlchemy database URL for connecting to the PostgreSQL database")
     db_user: str = Field(..., description="Database username for authentication")
     db_password: str = Field(..., description="Database password for authentication")
     db_name: str = Field(..., description="Name of the PostgreSQL database to connect to")
     db_batch_size: int = Field(default=100, description="Number of records to insert into the database in a single batch")
+
+    # ── Scheduler ──────────────────────────────────────────────
+    data_root: str = Field(default="/data", description="Root directory to crawl for data files")
 
     # ── Logging ────────────────────────────────────────────────
     log_level: str = Field(default="INFO", description="Logging verbosity level")

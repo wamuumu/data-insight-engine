@@ -1,8 +1,22 @@
+# Data processing
 pyarrow
-pydantic
-pydantic-settings
 openpyxl
+
+# Database
 sqlalchemy
 psycopg2-binary
 alembic
+
+# Settings and validation
+pydantic
+pydantic-settings
+python-dateutil
+
+# Scheduling
+apscheduler
+
+# Monitoring
+prometheus-client
+
+# Structured logging
 structlog
