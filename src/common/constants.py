@@ -11,6 +11,7 @@ SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".xlsx", ".parquet"})
 # Columns to drop from Parquet files during parsing
 PARQUET_DROP_COLUMNS: frozenset[str] = frozenset({
     "counter",
+    "extDataPresent",
     "free_1",
     "free_2",
     "free_3",

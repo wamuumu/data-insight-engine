@@ -86,19 +86,22 @@ class XLSXParser(BaseParser):
             segments = self._build_firmware_segments(file, switch_events, total_rows)
             firmware_lookup = self._make_firmware_lookup(segments)
 
-            event_id_col = header.index("Event ID") if "Event ID" in header else None
-            value_col = header.index("Value") if "Value" in header else None
-            date_col = header.index("Date") if "Date" in header else None
-            time_col = header.index("Time") if "Time" in header else None
+            # create a mapping of header names to their column indices for easy access
+            header_mapping = {col: i for i, col in enumerate(header)}
+
+            event_id_col = header_mapping.get("Event ID")
+            value_col = header_mapping.get("Value")
+            date_col = header_mapping.get("Date")
+            time_col = header_mapping.get("Time")
 
             for _, row in enumerate(all_rows):
                 record_data: dict = {}
 
                 # ── Required fields ───────────────────────────────────────
-                record_data["event_date"] = row[date_col] if date_col is not None else None
-                record_data["event_time"] = row[time_col] if time_col is not None else None
-                record_data["event_id"] = row[event_id_col] if event_id_col is not None else None
-                record_data["value"] = row[value_col] if value_col is not None else None
+                record_data["event_date"] = row[date_col]
+                record_data["event_time"] = row[time_col]
+                record_data["event_id"] = row[event_id_col]
+                record_data["value"] = row[value_col]
 
                 # ── Derived fields ────────────────────────────────────────
                 record_data["serial_number"] = sn

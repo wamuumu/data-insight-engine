@@ -2,12 +2,34 @@ import logging
 from typing import Generator
 
 import pyarrow.parquet as pq
+import datetime
 
 from common.constants import PARQUET_DROP_COLUMNS
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, SpecialEventRecord
 
 logger = logging.getLogger(__name__)
+
+_HEADER_MAPPING = {
+    "ACC_X": "acc_x",
+    "ACC_Y": "acc_y",
+    "ACC_Z": "acc_z",
+    "GYRO_X": "gyro_x",
+    "GYRO_Y": "gyro_y",
+    "GYRO_Z": "gyro_z",
+    "HDOP": "hdop",
+    "lat": "lat",
+    "long": "lon",
+    "speed_km_h": "speed",
+    "Hour": "hour",
+    "Min": "min",
+    "Sec": "sec",
+    "Cent": "cent",
+    "Alarms": "alarms",
+    "algoIgnited": "algo_ignited",
+    "algoEnabled": "algo_enabled",
+    "GPS_Fix": "gps_fix"
+}
 
 class ParquetParser(BaseParser):
     """
@@ -58,6 +80,22 @@ class ParquetParser(BaseParser):
 
             for i in range(num_rows):
                 record = {col: df[col][i] for col in df}
-                yield SpecialEventRecord(source_file=file.path, data=record) # TODO: field name may be not consistent with repository get 
+                record_data: dict = {}
+
+                # Map known fields to the expected data structure
+                for key, value in record.items():
+                    mapped_key = _HEADER_MAPPING.get(key)
+                    if mapped_key:
+                        record_data[mapped_key] = value
+                
+                # Build a datetime.time object for SQLAlchemy Time compatibility.
+                hr = int(record_data.pop("hour", 0) or 0)
+                mn = int(record_data.pop("min", 0) or 0)
+                sc = int(record_data.pop("sec", 0) or 0)
+                cent = int(record_data.pop("cent", 0) or 0)
+                us = min(max(cent, 0), 99) * 10_000
+                record_data["time"] = datetime.time(hour=hr, minute=mn, second=sc, microsecond=us)
+
+                yield SpecialEventRecord(source_file=file.path, data=record_data)
             
 
