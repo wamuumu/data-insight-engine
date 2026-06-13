@@ -29,7 +29,6 @@ def upgrade():
         sa.UniqueConstraint("checksum_sha256", name="uq_file_tracker_checksum"),
     )
     op.create_index("idx_file_tracker_status", "file_tracker", ["status"])
-    op.create_index("idx_file_tracker_file_path", "file_tracker", ["file_path"])
 
     # ── HistoryRecord ───────────────────────────────────────
     op.create_table(
@@ -46,10 +45,6 @@ def upgrade():
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("serial_number", "firmware_version", "event_date", "event_time", "event_id", name="uq_history_log_entry"),
     )
-    op.create_index("idx_history_log_sn_date", "history_log", ["serial_number", "event_date"])
-    op.create_index("idx_history_log_event_id", "history_log", ["event_id"])
-    op.create_index("idx_history_log_firmware", "history_log", ["firmware_version"])
-    op.create_index("idx_history_log_source_file", "history_log", ["source_file_id"])
 
     # ── SpecialEvent ───────────────────────────────────────
     op.create_table(
@@ -74,8 +69,6 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("NOW()")),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("idx_special_event_time", "special_event", ["time"])
-    op.create_index("idx_special_event_source_file", "special_event", ["source_file_id"])
 
 def downgrade():
     op.drop_table("special_event")
