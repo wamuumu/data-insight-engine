@@ -9,11 +9,13 @@ _RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")  # Timestamp for the c
 _LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 _LOG_FILE = _LOG_DIR / f"app_{_RUN_TIMESTAMP}.log"
 
-def setup_logging(log_level: str):
+def setup_logging(log_level: str, log_format: str):
     """
     Configure structured JSON-formatted logging for the application.
     """
     log_level_int = getattr(logging, log_level.upper(), logging.INFO)
+
+    renderer = structlog.processors.JSONRenderer() if log_format == "json" else structlog.dev.ConsoleRenderer(colors=False)
 
     shared_processors = [
         structlog.stdlib.add_logger_name,
@@ -37,7 +39,7 @@ def setup_logging(log_level: str):
         foreign_pre_chain=shared_processors,
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            structlog.processors.JSONRenderer(),
+            renderer,
         ]
     )
 

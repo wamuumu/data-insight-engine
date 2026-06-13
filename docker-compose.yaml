@@ -20,6 +20,7 @@ services:
     container_name: data-insight-engine
     env_file: .env
     volumes:
+      - ./src:/app/src:ro # Mount source code directory with read-only access #TODO: keep this only for development
       - ./src/logs:/app/src/logs # Mount logs directory for persistent logging
       - /mnt/c/Users/CostaloM/Desktop/test:/data:ro # Mount local directory with read-only access
     ports:

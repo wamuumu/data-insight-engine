@@ -16,7 +16,7 @@ from scheduler import build_scheduler
 settings = load_settings()
 
 # Set up logging
-setup_logging(log_level=settings.log_level)
+setup_logging(log_level=settings.log_level, log_format=settings.log_format)
 logger = logging.getLogger(__name__)
 
 def build_parser() -> argparse.ArgumentParser:

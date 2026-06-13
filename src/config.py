@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     # ── Logging ────────────────────────────────────────────────
     log_level: str = Field(default="INFO", description="Logging verbosity level")
+    log_format: str = Field(default="console", description="Logging format: 'console' for human-readable or 'json' for structured JSON logs")
 
     # ── Validators ─────────────────────────────────────────────
     @field_validator("log_level")
