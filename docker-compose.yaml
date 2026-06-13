@@ -20,9 +20,10 @@ services:
     container_name: data-insight-engine
     env_file: .env
     volumes:
+      - ./src/logs:/app/src/logs # Mount logs directory for persistent logging
       - /mnt/c/Users/CostaloM/Desktop/test:/data:ro # Mount local directory with read-only access
     ports:
-      - "8000:8000" # Expose app on localhost:8000 for Prometheus scraping
+      - "${METRICS_PORT:-8000}:8000" # Expose app on localhost:8000 for Prometheus scraping
     depends_on:
       postgres:
         condition: service_healthy # Wait for postgres to be ready

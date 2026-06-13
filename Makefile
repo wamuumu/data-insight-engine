@@ -29,6 +29,7 @@ build:
 
 up:
 	@echo "Starting services with Docker Compose"
+	mkdir -p src/logs && chmod 777 src/logs
 	docker compose -p ${PROJECT_NAME} up -d
 	@echo "Grafana       	→ http://localhost:3000"
 	@echo "Prometheus    	→ http://localhost:9090"
