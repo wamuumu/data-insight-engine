@@ -22,7 +22,7 @@ class HistoryLog(BaseModel):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     # ── Device identity ─────────────────────────────────────────
-    serial_number: Mapped[str] = mapped_column(String(16), nullable=False)
+    serial_number: Mapped[str] = mapped_column(String(9), nullable=False)
     firmware_version: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # ── Event details ───────────────────────────────────────────

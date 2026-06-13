@@ -6,6 +6,10 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+# TODO: revisit column types and fields, try to avoid memory inefficiencies
+# For example, event_date and event_time could be combined into a single timestamp field
+# Consider removing created_at, source_file_id, and potenially "useless" fields
+
 def upgrade():
 
     # ── FileTracker ───────────────────────────────────────
@@ -34,7 +38,7 @@ def upgrade():
     op.create_table(
         "history_log",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column("serial_number", sa.String(64), nullable=False),
+        sa.Column("serial_number", sa.String(9), nullable=False),
         sa.Column("firmware_version", sa.Integer(), nullable=False),
         sa.Column("event_date", sa.Date(), nullable=False),
         sa.Column("event_time", sa.Time(), nullable=False),
