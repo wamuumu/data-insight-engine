@@ -21,8 +21,8 @@ services:
     env_file: .env
     volumes:
       - ./src:/app/src:ro # Mount source code directory with read-only access #TODO: keep this only for development
-      - ./src/logs:/app/src/logs # Mount logs directory for persistent logging
-      - /mnt/c/Users/CostaloM/Desktop/test:/data:ro # Mount local directory with read-only access
+      - ./logs:/app/logs # Mount logs directory for persistent logging
+      - /mnt/c/Users/CostaloM/Desktop/test:/data:ro # Mount local directory with read-only access # TODO: this is not ideal for portability
     ports:
       - "${METRICS_PORT:-8000}:8000" # Expose app on localhost:8000 for Prometheus scraping
     depends_on:
@@ -63,8 +63,8 @@ services:
     ports:
       - "9090:9090" # Prometheus UI at localhost:9090
     volumes:
-      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"

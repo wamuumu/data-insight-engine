@@ -6,7 +6,7 @@ from pathlib import Path
 import structlog
 
 _RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")  # Timestamp for the current run, used in log file naming
-_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+_LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
 _LOG_FILE = _LOG_DIR / f"app_{_RUN_TIMESTAMP}.log"
 
 def setup_logging(log_level: str, log_format: str):
@@ -47,6 +47,7 @@ def setup_logging(log_level: str, log_format: str):
     stdout_handler.setFormatter(formatter)
     handlers: list[logging.Handler] = [stdout_handler]
 
+    # If not running inside a container mounting the logs directory, ensure it exists before trying to write log files
     if not _LOG_DIR.exists():
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
 
