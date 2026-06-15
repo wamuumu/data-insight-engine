@@ -123,9 +123,11 @@ class IngestionPipeline:
                     return
 
         tracker: FileTracker | None = None
+        tracker_id: int | None = None
+
         if not self.dry_run:
             with get_db_session(self.session_factory) as session:
-                tracker = self.file_tracker_repo.create_file_tracker(
+                tracker, created = self.file_tracker_repo.create_file_tracker(
                     session=session,
                     file_path=str(file.path),
                     file_name=file.path.name,
@@ -134,19 +136,31 @@ class IngestionPipeline:
                     file_mtime=file.modified_at,
                     checksum_sha256=checksum
                 )
+
+                if not created:
+                    if tracker.status == "done":
+                        logger.info("File already processed (via checksum), skipping", file_path=str(file.path))
+                        stats.files_deduplicated += 1
+                        files_processed.labels(status="deduplicated", file_type=file_type).inc()
+                        return
+                    elif tracker.status == "processing":
+                        logger.warning("Found stuck processing tracker, resetting", file_path=str(file.path), tracker_id=tracker.id)
+                        tracker.status = "pending"
+                        session.flush()
                 self.file_tracker_repo.mark_processing(session, tracker)
+                tracker_id = tracker.id
         
         with file_processing_duration.labels(file_type=file_type).time():
             try:
-                inserted, produced = self._stream_file(file, parser, tracker)
+                inserted, produced = self._stream_file(file, parser, tracker_id)
                 stats.files_parsed += 1
                 stats.records_produced += produced
                 stats.records_inserted += inserted
                 files_processed.labels(status="done", file_type=file_type).inc()
 
-                if not self.dry_run and tracker:
+                if not self.dry_run and tracker_id is not None:
                     with get_db_session(self.session_factory) as session:
-                        session.add(tracker)
+                        tracker = session.get(FileTracker, tracker_id)
                         self.file_tracker_repo.mark_done(session, tracker, rows_inserted=inserted)
             except Exception as e:
                 logger.error("Error processing file", file_path=str(file.path), error=str(e))
@@ -154,9 +168,9 @@ class IngestionPipeline:
                 stats.errors.append(PipelineError(file_path=file.path, error_message=str(e)))
                 files_processed.labels(status="failed", file_type=file_type).inc()
 
-                if not self.dry_run and tracker:
+                if not self.dry_run and tracker_id is not None:
                     with get_db_session(self.session_factory) as session:
-                        session.add(tracker)
+                        tracker = session.get(FileTracker, tracker_id)
                         self.file_tracker_repo.mark_failed(session, tracker, error_message=str(e))
 
     def _is_fast_duplicate(self, file: BaseFile) -> bool:
@@ -182,7 +196,7 @@ class IngestionPipeline:
         except Exception:
             return False
     
-    def _stream_file(self, file: BaseFile, parser: BaseParser, tracker: FileTracker | None) -> tuple[int, int]:
+    def _stream_file(self, file: BaseFile, parser: BaseParser, tracker_id: int | None) -> tuple[int, int]:
         """
         Stream the file through the parser and flush records in batches. Returns (inserted_count, produced_count).
         """
@@ -190,7 +204,7 @@ class IngestionPipeline:
         total_produced = 0
         history_log_buffer: list[HistoryLogRecord] = []
         special_event_buffer: list[SpecialEventRecord] = []
-        source_file_id = tracker.id if tracker else None
+        source_file_id = tracker_id
 
         for record in parser.parse(file):
             total_produced += 1

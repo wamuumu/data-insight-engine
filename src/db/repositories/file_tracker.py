@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from common.logging import get_logger
@@ -31,22 +32,30 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         file_size_bytes: int,
         file_mtime: float,
         checksum_sha256: str
-    ) -> FileTracker:
+    ) -> tuple[FileTracker, bool]:
         """
         Insert a new FileTracker record into the database with status 'pending' and return the created record.
         """
-        tracker = FileTracker(
-            file_path=file_path,
-            file_name=file_name,
-            file_type=file_type,
-            file_size_bytes=file_size_bytes,
-            file_mtime=file_mtime,
-            checksum_sha256=checksum_sha256,
-            status="pending",
+        stmt = (
+            insert(FileTracker)
+            .values(
+                file_path=file_path,
+                file_name=file_name,
+                file_type=file_type,
+                file_size_bytes=file_size_bytes,
+                file_mtime=file_mtime,
+                checksum_sha256=checksum_sha256,
+                status="pending",
+            )
+            .on_conflict_do_nothing(constraint="uq_file_tracker_checksum")
         )
-        session.add(tracker)
-        session.flush()  # Populate tracker.id without committing
-        return tracker
+        result = session.execute(stmt)
+        created = result.rowcount == 1
+
+        tracker = session.execute(
+            select(FileTracker).where(FileTracker.checksum_sha256 == checksum_sha256)
+        ).scalar_one()
+        return tracker, created
 
     def mark_processing(self, session: Session, tracker: FileTracker):
         """
