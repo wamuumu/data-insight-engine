@@ -1,13 +1,12 @@
-import logging
-
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from common.logging import get_logger
 from db.repositories.base import BaseRepository
 from db.models.special_event import SpecialEvent
 from ingestion.parsers.base import SpecialEventRecord
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SpecialEventRepository(BaseRepository[SpecialEvent]):

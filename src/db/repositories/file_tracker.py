@@ -1,13 +1,13 @@
-import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from common.logging import get_logger
 from db.repositories.base import BaseRepository
 from db.models.file_tracker import FileTracker
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FileTrackerRepository(BaseRepository[FileTracker]):

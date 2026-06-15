@@ -1,14 +1,14 @@
-import logging
 from typing import Generator
 
 import pyarrow.parquet as pq
 import datetime
 
 from common.constants import PARQUET_DROP_COLUMNS
+from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, SpecialEventRecord
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _HEADER_MAPPING = {
     "ACC_X": "acc_x",
@@ -49,24 +49,20 @@ class ParquetParser(BaseParser):
         """
         Parse the Parquet file and yield records as dictionaries.
         """
-        logger.info(
-            "Parsing Parquet file",
-            extra={"path": file.path, "size_mb": round(file.size / 1e6, 2)},
-        )
+        logger.info("Parsing Parquet file", path=str(file.path), size_mb=round(file.size / 1e6, 2))
         
         try:
             parquet_file = pq.ParquetFile(file.path)
         except Exception as e:
-            logger.error("Failed to read Parquet file", extra={"path": file.path, "error": str(e)})
+            logger.error("Failed to read Parquet file", path=str(file.path), error=str(e))
             raise
         
         logger.debug(
             "Parquet file metadata",
-            extra={
-                "num_row_groups": parquet_file.num_row_groups,
-                "num_rows": parquet_file.metadata.num_rows,
-                "columns": [col.name for col in parquet_file.schema_arrow],
-            },
+            path=str(file.path),
+            num_row_groups=parquet_file.num_row_groups,
+            num_rows=parquet_file.metadata.num_rows,
+            columns=[col.name for col in parquet_file.schema_arrow],
         )
 
         for batch in parquet_file.iter_batches(batch_size=self.batch_size):

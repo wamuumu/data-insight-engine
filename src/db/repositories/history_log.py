@@ -1,14 +1,13 @@
-import logging
-
 from dateutil.parser import parse as dateutil_parse
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from common.logging import get_logger
 from db.repositories.base import BaseRepository
 from db.models.history_log import HistoryLog
 from ingestion.parsers.base import HistoryLogRecord
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HistoryLogRepository(BaseRepository[HistoryLog]):
@@ -47,13 +46,13 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         try:
             parsed_date = dateutil_parse(raw_date, dayfirst=True).date()
         except Exception as e:
-            logger.warning(f"Failed to parse date '{raw_date}' for record {record}. Error: {e}")
+            logger.warning("Failed to parse date", date=raw_date, record=record, error=str(e))
             parsed_date = None
         
         try:
             parsed_time = dateutil_parse(raw_time).time()
         except Exception as e:
-            logger.warning(f"Failed to parse time '{raw_time}' for record {record}. Error: {e}")
+            logger.warning("Failed to parse time", time=raw_time, record=record, error=str(e))
             parsed_time = None
         
         return {

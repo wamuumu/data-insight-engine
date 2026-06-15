@@ -1,10 +1,10 @@
-import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from common.logging import get_logger
 from common.utils import compute_sha256, fast_file_identity
 from config import load_settings
 from db.models.file_tracker import FileTracker
@@ -26,7 +26,7 @@ from monitoring.metrics import (
 
 settings = load_settings()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @dataclass
 class PipelineError:
@@ -74,19 +74,17 @@ class IngestionPipeline:
         finally:
             pipeline_active.set(0)
             pipeline_last_run.set_to_current_time()
-        
+
         logger.info(
             "Pipeline run completed",
-            extra={
-                "files_discovered": stats.files_discovered,
-                "files_parsed": stats.files_parsed,
-                "files_skipped": stats.files_skipped,
-                "files_deduplicated": stats.files_deduplicated,
-                "files_failed": stats.files_failed,
-                "records_produced": stats.records_produced,
-                "records_inserted": stats.records_inserted,
-                "errors": [e.__dict__ for e in stats.errors]
-            }
+            files_discovered=stats.files_discovered,
+            files_parsed=stats.files_parsed,
+            files_skipped=stats.files_skipped,
+            files_deduplicated=stats.files_deduplicated,
+            files_failed=stats.files_failed,
+            records_produced=stats.records_produced,
+            records_inserted=stats.records_inserted,
+            errors=[e.__dict__ for e in stats.errors]
         )
 
         return stats
@@ -97,14 +95,14 @@ class IngestionPipeline:
         """
         parser = get_parser(file)
         if not parser:
-            logger.info("No parser found for file, skipping", extra={"file_path": str(file.path)})
+            logger.info("No parser found for file, skipping", file_path=str(file.path))
             stats.files_skipped += 1
             return
         
-        file_type = file.suffix.lstrip(".")
+        file_type = file.suffix.lstrip(".").lower()
 
         if self._is_fast_duplicate(file):
-            logger.debug("Fast deduplication hit - skipping file", extra={"file_path": str(file.path)})
+            logger.debug("Fast deduplication hit - skipping file", file_path=str(file.path))
             stats.files_deduplicated += 1
             files_processed.labels(status="deduplicated", file_type=file_type).inc()
             return
@@ -112,14 +110,14 @@ class IngestionPipeline:
         try:
             checksum = compute_sha256(file.path)
         except OSError as e:
-            logger.error("Cannot read file for checksum computation", extra={"file_path": str(file.path), "error": str(e)})
+            logger.error("Cannot read file for checksum computation", file_path=str(file.path), error=str(e))
             stats.files_failed += 1
             return
         
         if not self.dry_run:
             with get_db_session(self.session_factory) as session:
                 if self.file_tracker_repo.is_already_processed(session, checksum):
-                    logger.info("Checksum match - already processed file, skipping", extra={"file_path": str(file.path)})
+                    logger.info("Checksum match - already processed file, skipping", file_path=str(file.path))
                     stats.files_deduplicated += 1
                     files_processed.labels(status="deduplicated", file_type=file_type).inc()
                     return
@@ -151,7 +149,7 @@ class IngestionPipeline:
                         session.add(tracker)
                         self.file_tracker_repo.mark_done(session, tracker, rows_inserted=inserted)
             except Exception as e:
-                logger.error("Error processing file", extra={"file_path": str(file.path), "error": str(e)})
+                logger.error("Error processing file", file_path=str(file.path), error=str(e))
                 stats.files_failed += 1
                 stats.errors.append(PipelineError(file_path=file.path, error_message=str(e)))
                 files_processed.labels(status="failed", file_type=file_type).inc()
@@ -208,7 +206,7 @@ class IngestionPipeline:
                     total_inserted += self._flush_special_events(special_event_buffer, source_file_id)
                     special_event_buffer.clear()
             else:
-                logger.warning("Unknown record type produced by parser, skipping", extra={"record": record.__dict__})
+                logger.warning("Unknown record type produced by parser, skipping", record=record.__dict__)
 
         # Flush any remaining records in buffers
         if history_log_buffer:

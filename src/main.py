@@ -4,7 +4,7 @@ from pathlib import Path
 
 from prometheus_client import start_http_server
 
-from common.logging import setup_logging
+from common.logging import setup_logging, get_logger
 from config import load_settings
 from db.session import init_db
 from ingestion.crawler.base import BaseFile
@@ -17,7 +17,7 @@ settings = load_settings()
 
 # Set up logging
 setup_logging(log_level=settings.log_level, log_format=settings.log_format)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def build_parser() -> argparse.ArgumentParser:
     """
@@ -54,7 +54,7 @@ def handle_ingest(args: argparse.Namespace):
     """
     root = Path(args.path)
 
-    logger.info("Starting ingestion process", extra={"path": root, "dry_run": args.dry_run})
+    logger.info("Starting ingestion process", path=str(root), dry_run=args.dry_run)
 
     # Initialize database connection
     session_factory = init_db(settings.db_url)
@@ -63,7 +63,7 @@ def handle_ingest(args: argparse.Namespace):
     stats = pipeline.run()
 
     if stats.files_failed:
-        logger.warning("Ingestion finished with some failures", extra={"failed_files": stats.files_failed})
+        logger.warning("Ingestion finished with some failures", failed_files=stats.files_failed)
 
 def handle_file(args: argparse.Namespace):
     """
@@ -71,19 +71,19 @@ def handle_file(args: argparse.Namespace):
     """
     file_path = Path(args.file_path)
 
-    logger.info("Starting file parsing process", extra={"file_path": file_path, "dry_run": args.dry_run})
+    logger.info("Starting file parsing process", file_path=str(file_path), dry_run=args.dry_run)
 
     base_file = BaseFile(file_path)
 
     parser = get_parser(base_file)
 
     if not parser:
-        logger.error("Unsupported file type", extra={"file_type": base_file.suffix})
+        logger.error("Unsupported file type", file_type=base_file.suffix, file_path=str(file_path))
         return
     
     if args.dry_run:
         for record in parser.parse(base_file):
-            logger.info("Parsed record", extra={"record": repr(record)})
+            logger.info("Parsed record", record=record)
         return
     
     # Non-dry run: ingest the file
@@ -102,7 +102,7 @@ def handle_scheduler(args: argparse.Namespace):
     """
     Start the scheduler to run the ingestion pipeline at configured intervals.
     """
-    logger.info("Starting scheduler mode", extra={"time": args.time, "day_of_week": args.day_of_week, "day": args.day, "month": args.month})
+    logger.info("Starting scheduler mode", time=args.time, day_of_week=args.day_of_week, day=args.day, month=args.month)
     session_factory = init_db(settings.db_url, log_level=settings.log_level)
     pipeline = IngestionPipeline(root=Path(settings.data_root), session_factory=session_factory, dry_run=False)
     scheduler = build_scheduler(pipeline, time_str=args.time, day_of_week=args.day_of_week, day=args.day, month=args.month)
@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
     # Start Prometheus metrics server
     start_http_server(settings.metrics_port)
-    logger.info("Prometheus metrics server started", extra={"port": settings.metrics_port})
+    logger.info("Prometheus metrics server started", port=str(settings.metrics_port))
 
     # Build and parse command-line arguments
     arg_parser = build_parser()

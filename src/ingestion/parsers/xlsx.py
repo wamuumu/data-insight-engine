@@ -1,5 +1,4 @@
 import bisect
-import logging
 from typing import Generator, Callable
 
 import openpyxl
@@ -10,11 +9,12 @@ from common.constants import (
     SWITCH_OFF_EVENT_ID,
     UNDEFINED_FIRMWARE_VERSION,
 )
+from common.logging import get_logger
 from common.utils import extract_serial_number
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, HistoryLogRecord
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class XLSXParser(BaseParser):
@@ -32,27 +32,26 @@ class XLSXParser(BaseParser):
         """
         Parse the XLSX file and yield records as dictionaries.
         """
-        logger.info(
-            "Parsing XLSX file",
-            extra={"path": file.path, "size_mb": round(file.size / 1e6, 2)},
-        )
+        logger.info("Parsing XLSX file", path=str(file.path), size_mb=round(file.size / 1e6, 2))
         
         try:
             workbook = openpyxl.load_workbook(file.path, read_only=True, data_only=True)
         except Exception as e:
-            logger.error("Failed to open XLSX file", extra={"path": file.path, "error": str(e)})
+            logger.error("Failed to open XLSX file", path=str(file.path), error=str(e))
             raise
 
         logger.debug(
             "XLSX file opened successfully",
-            extra={"path": file.path, "sheets": workbook.sheetnames},
+            path=str(file.path),
+            sheets=workbook.sheetnames,
         )
 
         if len(workbook.sheetnames) != 1:
             logger.warning(
                 "Expected exactly one sheet in XLSX file, found %d.",
                 len(workbook.sheetnames),
-                extra={"path": file.path, "found_sheets": len(workbook.sheetnames)}
+                path=str(file.path),
+                found_sheets=len(workbook.sheetnames)
             )
         
         try:
@@ -122,7 +121,7 @@ class XLSXParser(BaseParser):
         if event_id_col is None or firmware_col is None:
             logger.warning(
                 "Sheet is missing 'Event ID' or 'Value' columns, skipping firmware index building.",
-                extra={"path": str(file.path)}
+                path=str(file.path)
             )
             return switch_events
         
@@ -194,8 +193,10 @@ class XLSXParser(BaseParser):
             else:
                 logger.warning(
                     "Unexpected last event type %s while processing firmware segments.",
-                    last_type,
-                    extra={"path": str(file.path), "row_index": row_index, "event_id": event_id}
+                    last_type,                    
+                    path=str(file.path),
+                    row_index=row_index,
+                    event_id=event_id
                 )
         
         # Close any trailing open segment

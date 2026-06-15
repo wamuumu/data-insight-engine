@@ -1,11 +1,12 @@
-import logging
 from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-logger = logging.getLogger(__name__)
+from common.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def build_engine(db_url: str, verbose: bool = False):
@@ -26,7 +27,7 @@ def build_engine(db_url: str, verbose: bool = False):
         )
         return engine
     except Exception as e:
-        logger.error(f"Failed to create database engine: {e}")
+        logger.error("Failed to create database engine", db_url=db_url, error=str(e))
         raise
 
 def init_db(db_url: str, log_level: str = "INFO") -> sessionmaker:
@@ -57,7 +58,7 @@ def get_db_session(session_factory: sessionmaker) -> Generator[Session, None, No
         yield session
         session.commit()
     except Exception as e:
-        logger.error(f"Database session error: {e}. Rolling back transaction.")
+        logger.error("Database session error", error=str(e))
         session.rollback()
         raise
     finally:

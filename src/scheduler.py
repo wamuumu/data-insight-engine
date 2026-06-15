@@ -1,13 +1,13 @@
-import logging
 from datetime import time
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from common.logging import get_logger
 from ingestion.pipeline import IngestionPipeline
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def build_scheduler(
@@ -41,7 +41,7 @@ def build_scheduler(
 
     scheduler.add_listener(_on_job_executed, _on_job_error)
 
-    logger.info("Scheduler configured", extra={"cron_expression": cron_trigger})
+    logger.info("Scheduler configured", cron_expression=str(cron_trigger))
     return scheduler
 
 def _schedule_at(
@@ -75,7 +75,7 @@ def _schedule_at(
 
 
 def _on_job_executed(event):
-    logger.info("Scheduled job completed successfully", extra={"job_id": event.job_id})
+    logger.info("Scheduled job completed successfully", job_id=event.job_id)
 
 def _on_job_error(event):
-    logger.error("Scheduled job failed", extra={"job_id": event.job_id, "error": str(event.exception)})
+    logger.error("Scheduled job failed", job_id=event.job_id, error=str(event.exception))

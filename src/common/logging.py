@@ -15,7 +15,7 @@ def setup_logging(log_level: str, log_format: str):
     """
     log_level_int = getattr(logging, log_level.upper(), logging.INFO)
 
-    renderer = structlog.processors.JSONRenderer() if log_format == "json" else structlog.dev.ConsoleRenderer(colors=False)
+    renderer = structlog.processors.JSONRenderer() if log_format.strip().lower() == "json" else structlog.dev.ConsoleRenderer(colors=False)
 
     shared_processors = [
         structlog.stdlib.add_logger_name,
@@ -30,7 +30,6 @@ def setup_logging(log_level: str, log_format: str):
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
-        context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
@@ -68,4 +67,4 @@ def setup_logging(log_level: str, log_format: str):
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """Return a named structlog logger."""
-    return structlog.get_logger(name)   
+    return structlog.get_logger(name)

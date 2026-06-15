@@ -1,12 +1,11 @@
-import logging
-
 from config import load_settings
+from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser
 from ingestion.parsers.parquet import ParquetParser
 from ingestion.parsers.xlsx import XLSXParser
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _settings = load_settings()
 
@@ -23,5 +22,5 @@ def get_parser(file: BaseFile) -> BaseParser | None:
         instance: BaseParser = factory()
         if instance.can_handle(file):
             return instance
-    logger.warning("No suitable parser found for file", extra={"path": file.path})
+    logger.warning("No suitable parser found for file", path=str(file.path))
     return None
