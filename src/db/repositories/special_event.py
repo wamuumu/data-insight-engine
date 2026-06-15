@@ -35,7 +35,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         """
         
         return {
-            "serial_number": record.serial_number,
+            "serial_number": record.data.get("serial_number"),
             "acc_x": record.data.get("acc_x"),
             "acc_y": record.data.get("acc_y"),
             "acc_z": record.data.get("acc_z"),

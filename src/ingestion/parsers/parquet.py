@@ -81,14 +81,14 @@ class ParquetParser(BaseParser):
                 record = {col: df[col][i] for col in df}
                 record_data: dict = {}
 
+                # Add serial number from file path
+                record_data["serial_number"] = sn
+
                 # Map known fields to the expected data structure
                 for key, value in record.items():
                     mapped_key = _HEADER_MAPPING.get(key)
                     if mapped_key:
                         record_data[mapped_key] = value
-
-                # Add serial number from file path
-                record_data["serial_number"] = sn
                 
                 # Build a datetime.time object for SQLAlchemy Time compatibility.
                 hr = int(record_data.pop("hour", 0) or 0)
