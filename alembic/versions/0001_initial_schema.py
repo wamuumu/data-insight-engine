@@ -10,6 +10,14 @@ depends_on = None
 # For example, event_date and event_time could be combined into a single timestamp field
 # Consider removing created_at, source_file_id, and potenially "useless" fields
 
+# Actual numbers: 
+# FileTracker:
+    # 2 files, table_size = 8192 bytes, indexes_size = 32 KB, total_size = 48 KB
+# HistoryRecord:
+    # 1811 records, table_size = 152 KB, indexes_size = 56 KB, total_size = 240 KB, xlsx log file = 60 KB
+# SpecialEvent:
+    # 8726 records, table_size = 1432 KB, indexes_size = 208 KB, total_size = 1672 KB, parquet special event file = 139 KB
+
 def upgrade():
 
     # ── FileTracker ───────────────────────────────────────
