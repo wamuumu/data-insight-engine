@@ -56,13 +56,12 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         tracker.started_at = datetime.now(timezone.utc)
         session.flush()
 
-    def mark_done(self, session: Session, tracker: FileTracker, rows_produced: int, rows_inserted: int):
+    def mark_done(self, session: Session, tracker: FileTracker, rows_inserted: int):
         """
         Update the given FileTracker record to mark it as 'done', set the finished_at timestamp, and update row counts.
         """
         tracker.status = "done"
         tracker.finished_at = datetime.now(timezone.utc)
-        tracker.rows_produced = rows_produced
         tracker.rows_inserted = rows_inserted
         session.flush()
 
@@ -72,5 +71,5 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         """
         tracker.status = "failed"
         tracker.finished_at = datetime.now(timezone.utc)
-        tracker.error_message = error_message[:1000] # Truncate to guard against excessively long messages
+        tracker.error_message = error_message[:2000] # Truncate to guard against excessively long messages
         session.flush()

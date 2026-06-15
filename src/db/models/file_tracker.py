@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,7 +16,7 @@ class FileTracker(BaseModel):
 
     # ── Identity ──────────────────────────────────────────────
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
-    file_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(128), nullable=False)
     file_type: Mapped[str] = mapped_column(String(16), nullable=False) # xlsx | parquet
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     file_mtime: Mapped[float] = mapped_column(Float, nullable=False)
@@ -27,10 +27,8 @@ class FileTracker(BaseModel):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ── Statistics ────────────────────────────────────────────
-    rows_produced: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     rows_inserted: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # ── Timestamps ───────────────────────────────────────────
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)

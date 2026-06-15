@@ -1,6 +1,4 @@
-from datetime import datetime, timezone
-
-from sqlalchemy import BigInteger, Date, Time, DateTime, Integer, String, UniqueConstraint, ForeignKey
+from sqlalchemy import BigInteger, Date, Time, DateTime, Integer, SmallInteger, String, UniqueConstraint, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
@@ -30,10 +28,9 @@ class HistoryLog(BaseModel):
     event_time: Mapped[Time] = mapped_column(Time, nullable=False)
 
     # ── Event data ──────────────────────────────────────────────
-    event_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_id: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     value: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # ── Lineage ─────────────────────────────────────────────────
     source_file_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("file_tracker.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False)
     

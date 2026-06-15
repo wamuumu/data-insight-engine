@@ -149,7 +149,7 @@ class IngestionPipeline:
                 if not self.dry_run and tracker:
                     with get_db_session(self.session_factory) as session:
                         session.add(tracker)
-                        self.file_tracker_repo.mark_done(session, tracker, rows_produced=produced, rows_inserted=inserted)
+                        self.file_tracker_repo.mark_done(session, tracker, rows_inserted=inserted)
             except Exception as e:
                 logger.error("Error processing file", extra={"file_path": str(file.path), "error": str(e)})
                 stats.files_failed += 1
@@ -181,7 +181,7 @@ class IngestionPipeline:
                     )
                 ).first()
                 return row is not None
-        except Exception as e:
+        except Exception:
             return False
     
     def _stream_file(self, file: BaseFile, parser: BaseParser, tracker: FileTracker | None) -> tuple[int, int]:
