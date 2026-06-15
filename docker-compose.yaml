@@ -7,29 +7,11 @@ volumes:
     driver: local
 
 networks:
-  dainet:
+  app-network:
+    name: ${NETWORK_NAME}
     driver: bridge
 
 services:
-
-  # ────────────────────────────────────────────────
-  # ETL Application - Core Data Processing Engine
-  # ────────────────────────────────────────────────
-  app:
-    image: data-insight-engine:latest
-    container_name: data-insight-engine
-    env_file: .env
-    volumes:
-      - ./src:/app/src:ro # Mount source code directory with read-only access #TODO: keep this only for development
-      - ./logs:/app/logs # Mount logs directory for persistent logging
-      - /mnt/c/Users/CostaloM/Desktop/test:/data:ro # Mount local directory with read-only access # TODO: this is not ideal for portability
-    ports:
-      - "${METRICS_PORT:-8000}:8000" # Expose app on localhost:8000 for Prometheus scraping
-    depends_on:
-      postgres:
-        condition: service_healthy # Wait for postgres to be ready
-    networks:
-      - dainet
   
   # ────────────────────────────────────────────────
   # PostgreSQL - Primary Data Source and Storage
@@ -51,7 +33,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - dainet
+      - app-network
     restart: unless-stopped
 
   # ────────────────────────────────────────────────
@@ -69,7 +51,7 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
     networks:
-      - dainet
+      - app-network
     restart: unless-stopped
 
   # ────────────────────────────────────────────────
@@ -84,7 +66,7 @@ services:
       postgres:
         condition: service_healthy # Wait for postgres to be ready
     networks:
-      - dainet
+      - app-network
     restart: unless-stopped
   
   # ────────────────────────────────────────────────
@@ -105,5 +87,5 @@ services:
     depends_on:
       - prometheus
     networks:
-      - dainet
+      - app-network
     restart: unless-stopped

@@ -1,0 +1,14 @@
+# .paths.example
+# List host directories to mount into the container under /app/data/<dirname>
+# One path per line. Empty lines and comments are ignored.
+
+# Example dataset folders (WSL paths)
+/mnt/c/Users/your-user/Desktop/test
+/mnt/c/Users/your-user/Desktop/datasets/customers
+/mnt/c/Users/your-user/Desktop/datasets/sales
+
+# External drive example
+/mnt/d/data
+
+# You can add as many as you want:
+# /mnt/c/path/to/another/dataset

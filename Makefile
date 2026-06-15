@@ -13,6 +13,18 @@ BLUE := \033[34m
 YELLOW := \033[33m
 CYAN := \033[36m
 
+# Define variables
+PATHS ?= .paths
+DATA_MOUNTS ?= $(shell grep -v '^\s*#' $(PATHS) | grep -v '^\s*$$')
+DOCKER_RUN = docker run --rm -it \
+	--env-file .env \
+	--network $(NETWORK_NAME) \
+	-v $(PWD)/src:/app/src:ro \
+	-v $(PWD)/logs:/app/logs \
+	-v $(PWD):/app \
+	$(foreach dir,$(DATA_MOUNTS),-v $(dir):/app/data/$(notdir $(dir)):ro) \
+	$(APP_IMAGE):latest
+
 .PHONY: help build up down shell migrate migrate-new
 
 # ── Default target ─────────────────────────────────────────────
@@ -51,21 +63,17 @@ down:
 	@docker compose -p ${PROJECT_NAME} down
 	@printf "$(GREEN)Containers stopped and removed$(RESET)\n"
 
-# TODO: the following targets are not working, remove app from compose file and adjust accordingly
-
 shell:
 	@printf "$(GREEN)Opening shell in app container$(RESET)\n"
-	@docker compose -p ${PROJECT_NAME} exec app bash
-	@printf "$(GREEN)Exited shell$(RESET)\n"
+	@$(DOCKER_RUN) bash
+	@printf "$(GREEN)Exited shell in app container$(RESET)\n"
 
 migrate:
 	@printf "$(YELLOW)Applying database migrations$(RESET)\n"
-	@docker compose -p ${PROJECT_NAME} exec app \
-		alembic -c alembic.ini upgrade head
-	@printf "$(YELLOW)Database migrations applied successfully$(RESET)\n"
+	@$(DOCKER_RUN) alembic -c alembic.ini upgrade head
+	@printf "$(GREEN)Database migrations applied successfully$(RESET)\n"
 
 migrate-new:
-	@printf "$(YELLOW)Generating new migration with message: ${m}$(RESET)\n"
-	@docker compose -p ${PROJECT_NAME} exec app \
-		alembic -c alembic.ini revision --autogenerate -m "${m}"
-	@printf "$(YELLOW)New migration generated successfully$(RESET)\n"
+	@printf "$(YELLOW)Generating new migration with message: $(m)$(RESET)\n"
+	@$(DOCKER_RUN) alembic -c alembic.ini revision --autogenerate -m "$(m)"
+	@printf "$(GREEN)New migration generated successfully$(RESET)\n"
