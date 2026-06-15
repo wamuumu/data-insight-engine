@@ -21,7 +21,7 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         source_file_id: int | None = None
     ) -> int:
         """
-        Batch-upsert history log records into the database. Duplicates are silently skipped. Returns the number of records successfully inserted.
+        Batch-upsert history log records into the database. Duplicates are allowed.
         """
         if not records:
             return 0
@@ -30,8 +30,7 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
 
         stmt = (
             insert(HistoryLog)
-            .values(rows)
-            .on_conflict_do_nothing(constraint="uq_history_log_entry")            
+            .values(rows)          
         )
         result = session.execute(stmt)
         return result.rowcount

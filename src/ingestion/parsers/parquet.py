@@ -4,6 +4,7 @@ import pyarrow.parquet as pq
 import datetime
 
 from common.constants import PARQUET_DROP_COLUMNS
+from common.utils import extract_serial_number
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, SpecialEventRecord
@@ -56,7 +57,7 @@ class ParquetParser(BaseParser):
         except Exception as e:
             logger.error("Failed to read Parquet file", path=str(file.path), error=str(e))
             raise
-        
+
         logger.debug(
             "Parquet file metadata",
             path=str(file.path),
@@ -64,6 +65,8 @@ class ParquetParser(BaseParser):
             num_rows=parquet_file.metadata.num_rows,
             columns=[col.name for col in parquet_file.schema_arrow],
         )
+
+        sn = extract_serial_number(file.path)
 
         for batch in parquet_file.iter_batches(batch_size=self.batch_size):
             df = batch.to_pydict()
@@ -83,6 +86,9 @@ class ParquetParser(BaseParser):
                     mapped_key = _HEADER_MAPPING.get(key)
                     if mapped_key:
                         record_data[mapped_key] = value
+
+                # Add serial number from file path
+                record_data["serial_number"] = sn
                 
                 # Build a datetime.time object for SQLAlchemy Time compatibility.
                 hr = int(record_data.pop("hour", 0) or 0)

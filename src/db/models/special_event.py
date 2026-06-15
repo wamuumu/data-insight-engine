@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, Time, Double, Float, Integer, ForeignKey
+from sqlalchemy import BigInteger, Boolean, Time, Double, Float, Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
@@ -8,9 +8,9 @@ class SpecialEvent(BaseModel):
     __tablename__ = "special_event"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    
-    # ── Lineage ─────────────────────────────────────────────────
-    source_file_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("file_tracker.id"), nullable=True)
+
+    # ── Device identity ─────────────────────────────────────────
+    serial_number: Mapped[str] = mapped_column(String(9), nullable=False)
 
     # ── Accelerometer data ──────────────────────────────────────
     acc_x: Mapped[float] = mapped_column(Float, nullable=False)
@@ -36,3 +36,6 @@ class SpecialEvent(BaseModel):
     alarms: Mapped[int] = mapped_column(Integer, nullable=False)
     algo_ignited: Mapped[bool] = mapped_column(Boolean, nullable=False)
     algo_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    # ── Lineage ─────────────────────────────────────────────────
+    source_file_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("file_tracker.id"), nullable=True)

@@ -30,7 +30,6 @@ def upgrade():
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("checksum_sha256", name="uq_file_tracker_checksum"),
     )
-    op.create_index("idx_file_tracker_status", "file_tracker", ["status"])
 
     # ── HistoryRecord ───────────────────────────────────────
     op.create_table(
@@ -44,14 +43,13 @@ def upgrade():
         sa.Column("value", sa.Integer(), nullable=False),
         sa.Column("source_file_id", sa.BigInteger(), sa.ForeignKey("file_tracker.id"), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("serial_number", "firmware_version", "event_date", "event_time", "event_id", name="uq_history_log_entry"),
     )
 
     # ── SpecialEvent ───────────────────────────────────────
     op.create_table(
         "special_event",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column("source_file_id", sa.BigInteger(), sa.ForeignKey("file_tracker.id"), nullable=True),
+        sa.Column("serial_number", sa.String(9), nullable=False),
         sa.Column("acc_x", sa.Float(), nullable=False),
         sa.Column("acc_y", sa.Float(), nullable=False),
         sa.Column("acc_z", sa.Float(), nullable=False),
@@ -67,6 +65,7 @@ def upgrade():
         sa.Column("alarms", sa.Integer(), nullable=False),
         sa.Column("algo_ignited", sa.Boolean(), nullable=False),
         sa.Column("algo_enabled", sa.Boolean(), nullable=False),
+        sa.Column("source_file_id", sa.BigInteger(), sa.ForeignKey("file_tracker.id"), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
 

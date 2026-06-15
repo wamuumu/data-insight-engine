@@ -25,7 +25,7 @@ DOCKER_RUN = docker run --rm -it \
 	$(foreach dir,$(DATA_MOUNTS),-v $(dir):/app/data/$(notdir $(dir)):ro) \
 	$(APP_IMAGE):latest
 
-.PHONY: help build up down shell migrate migrate-new
+.PHONY: help build up down shell migrate migrate-new db
 
 # ── Default target ─────────────────────────────────────────────
 help:
@@ -39,6 +39,8 @@ help:
 	@echo ""
 	@printf "  $(YELLOW)make migrate$(RESET)\t\t\tApply all pending database migrations\n"
 	@printf "  $(YELLOW)make migrate-new m=<msg>$(RESET)\tGenerate a new migration (autogenerate with message)\n"
+	@echo ""
+	@printf "  $(BLUE)make db$(RESET)\t\t\tConnect to the database container\n"
 	@echo ""
 
 # ── Docker lifecycle ───────────────────────────────────────────
@@ -77,3 +79,8 @@ migrate-new:
 	@printf "$(YELLOW)Generating new migration with message: $(m)$(RESET)\n"
 	@$(DOCKER_RUN) alembic -c alembic.ini revision --autogenerate -m "$(m)"
 	@printf "$(GREEN)New migration generated successfully$(RESET)\n"
+
+db:
+	@printf "$(GREEN)Connecting to the database container$(RESET)\n"
+	@docker compose -p ${PROJECT_NAME} exec postgres psql -U ${DB_USER} -d ${DB_NAME}
+	@printf "$(GREEN)Exited database container$(RESET)\n"

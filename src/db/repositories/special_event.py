@@ -35,7 +35,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         """
         
         return {
-            "source_file_id": source_file_id,
+            "serial_number": record.serial_number,
             "acc_x": record.data.get("acc_x"),
             "acc_y": record.data.get("acc_y"),
             "acc_z": record.data.get("acc_z"),
@@ -51,4 +51,5 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
             "alarms": record.data.get("alarms"),
             "algo_ignited": bool(record.data.get("algo_ignited")),
             "algo_enabled": bool(record.data.get("algo_enabled")),
+            "source_file_id": source_file_id,
         }

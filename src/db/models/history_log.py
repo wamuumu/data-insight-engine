@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Date, Time, Integer, SmallInteger, String, UniqueConstraint, ForeignKey
+from sqlalchemy import BigInteger, Date, Time, Integer, SmallInteger, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
@@ -6,16 +6,6 @@ from db.models.base import BaseModel
 
 class HistoryLog(BaseModel):
     __tablename__ = "history_log"
-    __table_args__ = (
-        UniqueConstraint(
-            "serial_number",
-            "firmware_version",
-            "event_date",
-            "event_time",
-            "event_id",
-            name="uq_history_log_entry"
-        ),
-    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 

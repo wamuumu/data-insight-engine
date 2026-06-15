@@ -236,13 +236,15 @@ class IngestionPipeline:
         Flush a batch of history log records to the database. Returns the number of records inserted.
         """
         if self.dry_run:
-            logger.debug("Dry run enabled - skipping DB insert for %d history log records.", len(records))
+            logger.debug("Dry run enabled - skipping history log DB insert.", skipped=len(records))
             return 0
+        
+        # TODO: add batch retry mechanism, each batch must be inserted before proceeding to preserve chronological order
 
         with get_db_session(self.session_factory) as session:
             inserted = self.history_log_repo.upsert_history_logs(session, records, source_file_id)
             records_ingested.labels(table="history_log").inc(inserted)
-            logger.debug("Flushed %d history log records to the database.", inserted)
+            logger.debug("Flushed history logs to the database.", inserted=inserted)
             return inserted
 
     def _flush_special_events(self, records: list[SpecialEventRecord], source_file_id: int | None) -> int:
@@ -250,11 +252,13 @@ class IngestionPipeline:
         Flush a batch of special event records to the database. Returns the number of records inserted.
         """
         if self.dry_run:
-            logger.debug("Dry run enabled - skipping DB insert for %d special event records.", len(records))
+            logger.debug("Dry run enabled - skipping special event DB insert.", skipped=len(records))
             return 0
+        
+        # TODO: add batch retry mechanism, each batch must be inserted before proceeding to preserve chronological order
 
         with get_db_session(self.session_factory) as session:
             inserted = self.special_event_repo.upsert_special_events(session, records, source_file_id)
             records_ingested.labels(table="special_event").inc(inserted)
-            logger.debug("Flushed %d special event records to the database.", inserted)
+            logger.debug("Flushed special events to the database.", inserted=inserted)
             return inserted
