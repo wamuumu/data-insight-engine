@@ -65,8 +65,8 @@ def upgrade():
         sa.Column("gyro_y", sa.Float(), nullable=False),
         sa.Column("gyro_z", sa.Float(), nullable=False),
         sa.Column("hdop", sa.Float(), nullable=False),
-        sa.Column("lat", sa.Double(), nullable=False),
-        sa.Column("lon", sa.Double(), nullable=False),
+        sa.Column("lat", sa.Float(), nullable=False),       # 32 bits as the device reports
+        sa.Column("lon", sa.Float(), nullable=False),       # 32 bits as the device reports
         sa.Column("speed", sa.Float(), nullable=False),
         sa.Column("gps_fix", sa.Boolean(), nullable=False),
         sa.Column("time", sa.Time(), nullable=False),
