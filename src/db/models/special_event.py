@@ -1,36 +1,42 @@
-from sqlalchemy import BigInteger, Boolean, Time, Double, Float, Integer, String, ForeignKey
+from datetime import time
+
+from sqlalchemy import BigInteger, Boolean, Time, Float, Index, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
 
+_REAL = Float(precision=24) # Use for 32-bit float values
 
 class SpecialEvent(BaseModel):
     __tablename__ = "special_event"
+    __table_args__ = (
+        Index("idx_special_event_device_id", "device_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     # ── Device identity ─────────────────────────────────────────
-    serial_number: Mapped[str] = mapped_column(String(9), nullable=False)
+    device_id: Mapped[int] = mapped_column(Integer, ForeignKey("device.id"), nullable=False)
 
     # ── Accelerometer data ──────────────────────────────────────
-    acc_x: Mapped[float] = mapped_column(Float, nullable=False)
-    acc_y: Mapped[float] = mapped_column(Float, nullable=False)
-    acc_z: Mapped[float] = mapped_column(Float, nullable=False)
+    acc_x: Mapped[float] = mapped_column(_REAL, nullable=False)
+    acc_y: Mapped[float] = mapped_column(_REAL, nullable=False)
+    acc_z: Mapped[float] = mapped_column(_REAL, nullable=False)
 
     # ── Gyroscope data ─────────────────────────────────────────
-    gyro_x: Mapped[float] = mapped_column(Float, nullable=False)
-    gyro_y: Mapped[float] = mapped_column(Float, nullable=False)
-    gyro_z: Mapped[float] = mapped_column(Float, nullable=False)
+    gyro_x: Mapped[float] = mapped_column(_REAL, nullable=False)
+    gyro_y: Mapped[float] = mapped_column(_REAL, nullable=False)
+    gyro_z: Mapped[float] = mapped_column(_REAL, nullable=False)
 
     # ── GPS data ───────────────────────────────────────────────
-    hdop: Mapped[float] = mapped_column(Float, nullable=False)
-    lat: Mapped[float] = mapped_column(Double, nullable=False)
-    lon: Mapped[float] = mapped_column(Double, nullable=False)
-    speed: Mapped[float] = mapped_column(Float, nullable=False)
+    hdop: Mapped[float] = mapped_column(_REAL, nullable=False)
+    lat: Mapped[float] = mapped_column(_REAL, nullable=False)
+    lon: Mapped[float] = mapped_column(_REAL, nullable=False)
+    speed: Mapped[float] = mapped_column(_REAL, nullable=False)
     gps_fix: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     # ── Time infos ─────────────────────────────────────────────
-    time: Mapped[Time] = mapped_column(Time, nullable=False)
+    time: Mapped[time] = mapped_column(Time, nullable=False)
 
     # ── Alarms & flags ─────────────────────────────────────────
     alarms: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -38,4 +44,4 @@ class SpecialEvent(BaseModel):
     algo_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     # ── Lineage ─────────────────────────────────────────────────
-    source_file_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("file_tracker.id"), nullable=True)
+    source_file_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("file_tracker.id"), nullable=True)

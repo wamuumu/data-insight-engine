@@ -1,10 +1,16 @@
-from datetime import datetime
+from enum import StrEnum
+from pathlib import Path
 
-from sqlalchemy import BigInteger, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
 
+class FileStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    DONE = "done"
+    FAILED = "failed"
 
 class FileTracker(BaseModel):
     __tablename__ = "file_tracker"
@@ -12,23 +18,31 @@ class FileTracker(BaseModel):
         UniqueConstraint("checksum_sha256", name="uq_file_tracker_checksum"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # ── Identity ──────────────────────────────────────────────
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
-    file_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    file_type: Mapped[str] = mapped_column(String(16), nullable=False) # xlsx | parquet
-    file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    file_mtime: Mapped[float] = mapped_column(Float, nullable=False)
-    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    checksum_sha256: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
 
-    # ── Processing Status ─────────────────────────────────────
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending") # pending | processing | done | failed
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ── Processing ────────────────────────────────────────────
+    status: Mapped[FileStatus] = mapped_column(String(16), nullable=False, default=FileStatus.PENDING.value)
 
-    # ── Statistics ────────────────────────────────────────────
-    rows_inserted: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
-    # ── Timestamps ───────────────────────────────────────────
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    @property
+    def file_name(self) -> str:
+        """Derive the file name from the file path."""
+        return Path(self.file_path).name
+    
+    @property
+    def file_type(self) -> str:
+        """Derive the file type from the file name."""
+        return Path(self.file_path).suffix[1:].lower()  # Get extension without dot and convert to lower case
+    
+    @property
+    def file_size(self) -> int:
+        """Get the file size in bytes."""
+        return Path(self.file_path).stat().st_size
+    
+    @property
+    def file_mtime(self) -> float:
+        """Get the file modification time in seconds since the epoch."""
+        return Path(self.file_path).stat().st_mtime

@@ -1,4 +1,12 @@
+from enum import StrEnum
+
 from prometheus_client import Counter, Gauge, Histogram
+
+class MetricStatus(StrEnum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    INCOMPLETE = "incomplete"
+    DEDUPLICATED = "deduplicated"
 
 # ── File-level counters ───────────────────────────────────────
 files_processed = Counter(

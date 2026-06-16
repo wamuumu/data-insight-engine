@@ -14,15 +14,16 @@ YELLOW := \033[33m
 CYAN := \033[36m
 
 # Define variables
-PATHS ?= .paths
-DATA_MOUNTS ?= $(shell grep -v '^\s*#' $(PATHS) | grep -v '^\s*$$')
+DOCKER_DATA_VOLUMES := $(shell \
+    yq -r '.volumes[] | "-v " + .path + ":" + .target + (if .readonly then ":ro" else "" end)' \
+    $(MOUNTS_FILE) | \
+    sed 's|\$$(PWD)|$(PWD)|g' \
+)
+
 DOCKER_RUN = docker run --rm -it \
 	--env-file .env \
 	--network $(NETWORK_NAME) \
-	-v $(PWD)/src:/app/src:ro \
-	-v $(PWD)/logs:/app/logs \
-	-v $(PWD):/app \
-	$(foreach dir,$(DATA_MOUNTS),-v $(dir):/app/data/$(notdir $(dir)):ro) \
+	$(DOCKER_DATA_VOLUMES) \
 	$(APP_IMAGE):latest
 
 .PHONY: help build up down shell migrate migrate-new db

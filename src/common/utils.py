@@ -1,6 +1,7 @@
 import re
 import hashlib
 from pathlib import Path
+from datetime import datetime, time
 
 def extract_serial_number(path: Path) -> str | None:
     """
@@ -11,20 +12,34 @@ def extract_serial_number(path: Path) -> str | None:
     match = _SN_PATTERN.search(str(path))
     return match.group() if match else None
 
-def compute_sha256(path: Path) -> str:
+def compute_sha256(path: Path) -> bytes | None:
     """
     Compute the SHA-256 hash of the file at the given path.
+    Returns raw bytes of the hash (32 bytes).
     """
     _CHUNK = 1024 * 1024  # Read in 1 MB chunks
     sha256_hash = hashlib.sha256()
-    with path.open("rb") as f:
-        while chunk := f.read(_CHUNK):
-            sha256_hash.update(chunk)
-    return sha256_hash.hexdigest()
+    try:
+        with path.open("rb") as f:
+            while chunk := f.read(_CHUNK):
+                sha256_hash.update(chunk)
+        return sha256_hash.digest()
+    except OSError:
+        return None
 
-def fast_file_identity(path: Path) -> tuple[str, int, float]:
+def combine_date_time(date_str: str, time_str: str, format_str: str = "%d/%m/%Y %H:%M:%S.%f") -> datetime:
     """
-    Return a (path, size, mtime) tuple for quick equality checks of file identity.
+    Combine date and time strings into a single datetime object.
     """
-    stat = path.stat()
-    return (str(path), stat.st_size, stat.st_mtime)
+    try:
+        return datetime.strptime(f"{date_str} {time_str}", format_str)
+    except ValueError as e:
+        # fallback without milliseconds
+        return datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M:%S")
+    
+def construct_time(hour: int, minute: int, second: int, centisecond: int) -> time:
+    """
+    Construct a datetime.time object from hour, minute, second, and centisecond components.
+    """
+    microsecond = min(max(centisecond, 0), 99) * 10_000
+    return time(hour=hour, minute=minute, second=second, microsecond=microsecond)

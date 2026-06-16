@@ -4,7 +4,7 @@ import pyarrow.parquet as pq
 import datetime
 
 from common.constants import PARQUET_DROP_COLUMNS
-from common.utils import extract_serial_number
+from common.utils import construct_time
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, SpecialEventRecord
@@ -66,8 +66,6 @@ class ParquetParser(BaseParser):
             columns=[col.name for col in parquet_file.schema_arrow],
         )
 
-        sn = extract_serial_number(file.path)
-
         for batch in parquet_file.iter_batches(batch_size=self.batch_size):
             df = batch.to_pydict()
 
@@ -81,9 +79,6 @@ class ParquetParser(BaseParser):
                 record = {col: df[col][i] for col in df}
                 record_data: dict = {}
 
-                # Add serial number from file path
-                record_data["serial_number"] = sn
-
                 # Map known fields to the expected data structure
                 for key, value in record.items():
                     mapped_key = _HEADER_MAPPING.get(key)
@@ -95,8 +90,8 @@ class ParquetParser(BaseParser):
                 mn = int(record_data.pop("min", 0) or 0)
                 sc = int(record_data.pop("sec", 0) or 0)
                 cent = int(record_data.pop("cent", 0) or 0)
-                us = min(max(cent, 0), 99) * 10_000
-                record_data["time"] = datetime.time(hour=hr, minute=mn, second=sc, microsecond=us)
+                
+                record_data["time"] = construct_time(hr, mn, sc, cent)
 
                 yield SpecialEventRecord(source_file=file.path, data=record_data)
             

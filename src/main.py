@@ -1,5 +1,4 @@
 import argparse
-import logging
 from pathlib import Path
 
 from prometheus_client import start_http_server
@@ -8,7 +7,7 @@ from common.logging import setup_logging, get_logger
 from config import load_settings
 from db.session import init_db
 from ingestion.crawler.base import BaseFile
-from ingestion.pipeline import IngestionPipeline
+from ingestion.pipeline import IngestionPipeline, PipelineStats
 from ingestion.registry import get_parser
 from scheduler import build_scheduler
 
@@ -76,7 +75,6 @@ def handle_file(args: argparse.Namespace):
     base_file = BaseFile(file_path)
 
     parser = get_parser(base_file)
-
     if not parser:
         logger.error("Unsupported file type", file_type=base_file.suffix, file_path=str(file_path))
         return
@@ -92,11 +90,11 @@ def handle_file(args: argparse.Namespace):
 
     parser_instance = get_parser(base_file)
     if parser_instance:
-        pipeline._process_one(base_file, stats=type("Stats", (), {
-            "files_discovered": 0, "files_parsed": 0, "files_skipped": 0,
-            "files_deduplicated": 0, "files_failed": 0, "records_produced": 0,
-            "records_inserted": 0, "errors": [],
-        }))
+        stats = PipelineStats()
+        pipeline._process_one(base_file, stats=stats)
+
+        if stats.files_failed:
+            logger.warning("File parsing finished with some failures", stats=stats)
 
 def handle_scheduler(args: argparse.Namespace):
     """

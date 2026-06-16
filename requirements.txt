@@ -10,7 +10,6 @@ alembic
 # Settings and validation
 pydantic
 pydantic-settings
-python-dateutil
 
 # Scheduling
 apscheduler

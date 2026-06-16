@@ -17,6 +17,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         self,
         session: Session,
         records: list[SpecialEventRecord],
+        device_id: int,
         source_file_id: int | None = None
     ) -> int:
         """
@@ -25,17 +26,17 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         if not records:
             return 0
         
-        rows = [self._special_event_to_row(r, source_file_id) for r in records]
+        rows = [self._special_event_to_row(r, device_id, source_file_id) for r in records]
         result = session.execute(insert(SpecialEvent).values(rows))
         return result.rowcount
 
-    def _special_event_to_row(self, record: SpecialEventRecord, source_file_id: int | None) -> dict:
+    def _special_event_to_row(self, record: SpecialEventRecord, device_id: int, source_file_id: int | None) -> dict:
         """
         Convert a SpecialEventRecord to a dictionary suitable for database insertion.
         """
         
         return {
-            "serial_number": record.data.get("serial_number"),
+            "device_id": device_id,
             "acc_x": record.data.get("acc_x"),
             "acc_y": record.data.get("acc_y"),
             "acc_z": record.data.get("acc_z"),

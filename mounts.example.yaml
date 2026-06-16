@@ -1,0 +1,12 @@
+volumes:
+  
+  # Mandatory mounts  
+  - path: $(PWD)
+    target: /app
+    readonly: false
+
+  # Optional mounts (for data)
+  # Remember to set readonly to true for data mounts to prevent accidental modifications
+  - path: your/data/path
+    target: /app/data/path
+    readonly: true

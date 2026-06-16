@@ -10,7 +10,6 @@ from common.constants import (
     UNDEFINED_FIRMWARE_VERSION,
 )
 from common.logging import get_logger
-from common.utils import extract_serial_number
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, HistoryLogRecord
 
@@ -63,7 +62,6 @@ class XLSXParser(BaseParser):
         """
         Parse the workbook and yield HistoryLogRecord instances. This method assumes the workbook is already open.
         """
-        sn = extract_serial_number(file.path)
         abs_row_index = 0
 
         for sheet_name in workbook.sheetnames:
@@ -103,7 +101,6 @@ class XLSXParser(BaseParser):
                 record_data["value"] = row[value_col]
 
                 # ── Derived fields ────────────────────────────────────────
-                record_data["serial_number"] = sn
                 record_data["firmware_version"] = firmware_lookup(abs_row_index)
 
                 yield HistoryLogRecord(source_file=str(file.path), data=record_data)
