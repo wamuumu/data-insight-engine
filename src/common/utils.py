@@ -1,7 +1,7 @@
 import re
 import hashlib
 from pathlib import Path
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 
 def extract_serial_number(path: Path) -> str | None:
     """
@@ -32,10 +32,12 @@ def combine_date_time(date_str: str, time_str: str, format_str: str = "%d/%m/%Y 
     Combine date and time strings into a single datetime object.
     """
     try:
-        return datetime.strptime(f"{date_str} {time_str}", format_str)
+        dt = datetime.strptime(f"{date_str} {time_str}", format_str)
     except ValueError as e:
         # fallback without milliseconds
-        return datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M:%S")
+        dt = datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M:%S")
+    
+    return dt.replace(tzinfo=timezone.utc)
     
 def construct_time(hour: int, minute: int, second: int, centisecond: int) -> time:
     """

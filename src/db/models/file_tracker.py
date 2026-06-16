@@ -25,7 +25,7 @@ class FileTracker(BaseModel):
     checksum_sha256: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
 
     # ── Processing ────────────────────────────────────────────
-    status: Mapped[FileStatus] = mapped_column(String(16), nullable=False, default=FileStatus.PENDING.value)
+    status: Mapped[FileStatus] = mapped_column(String(16), nullable=False, default=FileStatus.PENDING)
 
     @property
     def file_name(self) -> str:
@@ -35,14 +35,4 @@ class FileTracker(BaseModel):
     @property
     def file_type(self) -> str:
         """Derive the file type from the file name."""
-        return Path(self.file_path).suffix[1:].lower()  # Get extension without dot and convert to lower case
-    
-    @property
-    def file_size(self) -> int:
-        """Get the file size in bytes."""
-        return Path(self.file_path).stat().st_size
-    
-    @property
-    def file_mtime(self) -> float:
-        """Get the file modification time in seconds since the epoch."""
-        return Path(self.file_path).stat().st_mtime
+        return Path(self.file_path).suffix[1:].lower()

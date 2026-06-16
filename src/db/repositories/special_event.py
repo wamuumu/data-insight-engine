@@ -13,7 +13,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
     def __init__(self):
         super().__init__(SpecialEvent)
 
-    def upsert_special_events(
+    def insert_special_events(
         self,
         session: Session,
         records: list[SpecialEventRecord],
@@ -21,7 +21,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         source_file_id: int | None = None
     ) -> int:
         """
-        Batch-upsert special event records into the database. Duplicates are checked using file_tracker. Returns the number of records successfully inserted.
+        Batch-insert special event records into the database. Returns the number of records successfully inserted.
         """
         if not records:
             return 0

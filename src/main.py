@@ -6,9 +6,7 @@ from prometheus_client import start_http_server
 from common.logging import setup_logging, get_logger
 from config import load_settings
 from db.session import init_db
-from ingestion.crawler.base import BaseFile
-from ingestion.pipeline import IngestionPipeline, PipelineStats
-from ingestion.registry import get_parser
+from ingestion.pipeline import IngestionPipeline
 from scheduler import build_scheduler
 
 # Load settings
@@ -26,16 +24,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     # ── ingest ───────────────────────────────────────
-    ingest_parser = subparsers.add_parser("ingest", help="Crawl a directory and ingest all supported files")
-    ingest_parser.add_argument("path", type=str, help="Root path to crawl")
-    ingest_parser.add_argument("--dry-run", action="store_true", help="Parse files and validate output without writing to the database")
+    ingest_parser = subparsers.add_parser("ingest", help="Crawl a directory or load a single file and ingest data into the database")
+    ingest_parser.add_argument("path", type=str, help="Directory path or file path to ingest")
+    ingest_parser.add_argument("--dry-run", action="store_true", help="Parse and validate without inserting into the database")
     ingest_parser.set_defaults(func=handle_ingest)
-
-    # ── file ─────────────────────────────────────────
-    file_parser = subparsers.add_parser("file", help="Parse (and optionally ingest) a single file")
-    file_parser.add_argument("file_path", type=str, help="Path to the file")
-    file_parser.add_argument("--dry-run", action="store_true", help="Parse the file and validate output without writing to the database")
-    file_parser.set_defaults(func=handle_file)
 
     # ── scheduler ───────────────────────────────────
     scheduler_parser = subparsers.add_parser("schedule", help="Start the scheduler and run ingestion at configured intervals")
@@ -49,52 +41,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 def handle_ingest(args: argparse.Namespace):
     """
-    Handle the 'ingest' command to crawl a directory and ingest files.
+    Handle the 'ingest' command to crawl a directory or load a single file and ingest data into the database.
     """
     root = Path(args.path)
+    file_mode = root.is_file()
 
     logger.info("Starting ingestion process", path=str(root), dry_run=args.dry_run)
 
     # Initialize database connection
     session_factory = init_db(settings.db_url)
 
-    pipeline = IngestionPipeline(root=root, session_factory=session_factory, dry_run=args.dry_run)
+    pipeline = IngestionPipeline(root=root, session_factory=session_factory, dry_run=args.dry_run, file_mode=file_mode)
     stats = pipeline.run()
 
     if stats.files_failed:
         logger.warning("Ingestion finished with some failures", failed_files=stats.files_failed)
-
-def handle_file(args: argparse.Namespace):
-    """
-    Parse a single file and optionally ingest it into the database.
-    """
-    file_path = Path(args.file_path)
-
-    logger.info("Starting file parsing process", file_path=str(file_path), dry_run=args.dry_run)
-
-    base_file = BaseFile(file_path)
-
-    parser = get_parser(base_file)
-    if not parser:
-        logger.error("Unsupported file type", file_type=base_file.suffix, file_path=str(file_path))
-        return
-    
-    if args.dry_run:
-        for record in parser.parse(base_file):
-            logger.info("Parsed record", record=record)
-        return
-    
-    # Non-dry run: ingest the file
-    session_factory = init_db(settings.db_url, log_level=settings.log_level)
-    pipeline = IngestionPipeline(root=file_path.parent, session_factory=session_factory, dry_run=False)
-
-    parser_instance = get_parser(base_file)
-    if parser_instance:
-        stats = PipelineStats()
-        pipeline._process_one(base_file, stats=stats)
-
-        if stats.files_failed:
-            logger.warning("File parsing finished with some failures", stats=stats)
 
 def handle_scheduler(args: argparse.Namespace):
     """

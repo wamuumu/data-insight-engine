@@ -17,7 +17,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         """
         Check if a file with the given checksum has already been processed.
         """
-        stmt = select(FileTracker.id).where(FileTracker.checksum_sha256 == checksum, FileTracker.status == FileStatus.DONE.value)
+        stmt = select(FileTracker.id).where(FileTracker.checksum_sha256 == checksum, FileTracker.status == FileStatus.DONE)
         result = session.execute(stmt).first()
         return result is not None
     
@@ -43,7 +43,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
             .values(
                 file_path=file_path,
                 checksum_sha256=checksum_sha256,
-                status=FileStatus.PENDING.value
+                status=FileStatus.PENDING
             )
             .on_conflict_do_nothing(constraint="uq_file_tracker_checksum")
             .returning(FileTracker)
@@ -60,7 +60,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         """
         Update the given FileTracker record to mark it as 'processing' and set the started_at timestamp.
         """
-        tracker.status = FileStatus.PROCESSING.value
+        tracker.status = FileStatus.PROCESSING
         logger.info("File processing started", file_path=tracker.file_path)
         session.flush()
 
@@ -68,7 +68,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         """
         Update the given FileTracker record to mark it as 'done', set the finished_at timestamp, and update row counts.
         """
-        tracker.status = FileStatus.DONE.value
+        tracker.status = FileStatus.DONE
         logger.info("File processing completed", file_path=tracker.file_path, rows_inserted=rows_inserted)
         session.flush()
 
@@ -76,6 +76,6 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         """
         Update the given FileTracker record to mark it as 'failed', set the finished_at timestamp, and record the error message.
         """
-        tracker.status = FileStatus.FAILED.value
+        tracker.status = FileStatus.FAILED
         logger.error("File processing failed", file_path=tracker.file_path, error_message=error_message)
         session.flush()

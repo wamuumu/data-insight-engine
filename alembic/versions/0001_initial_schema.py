@@ -38,7 +38,7 @@ def upgrade():
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("file_path", sa.Text(), nullable=False),
         sa.Column("checksum_sha256", BYTEA(), nullable=False),
-        sa.Column("status", sa.String(16), nullable=False, server_default=FileStatus.PENDING.value),
+        sa.Column("status", sa.String(16), nullable=False, server_default=FileStatus.PENDING),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("checksum_sha256", name="uq_file_tracker_checksum"),
     )

@@ -49,11 +49,12 @@ class IngestionPipeline:
     """
     Orchestrates the crawling and parsing of files for ingestion.
     """
-    def __init__(self, root: Path, session_factory: sessionmaker, dry_run: bool = False):
+    def __init__(self, root: Path, session_factory: sessionmaker, dry_run: bool = False, file_mode: bool = False):
         self.root = root
         self.session_factory = session_factory
         self.dry_run = dry_run
-        self.crawler = DriveCrawler(root)
+        self.file_mode = file_mode
+        self.crawler = DriveCrawler(root) if not file_mode else None  # Crawler is not needed in file mode
         self.device_repo = DeviceRepository()
         self.file_tracker_repo = FileTrackerRepository()
         self.history_log_repo = HistoryLogRepository()
@@ -62,11 +63,19 @@ class IngestionPipeline:
     def run(self) -> PipelineStats:
         stats = PipelineStats()
         pipeline_active.set(1)
-
+            
         try:
-            for file in self.crawler.crawl():
-                stats.files_discovered += 1
-                self._process_one(file, stats)
+            if self.file_mode:
+                # Single file mode (e.g. when root is a file path instead of directory)
+                logger.info("File mode enabled. Processing single file.", file_path=str(self.root))
+                stats.files_discovered = 1  # Assume one file is being processed in this mode
+                self._process_one(BaseFile(self.root), stats)
+            else:
+                # Normal mode with crawling
+                logger.info("File mode disabled. Starting crawl.", root=str(self.root))
+                for file in self.crawler.crawl():
+                    stats.files_discovered += 1
+                    self._process_one(file, stats)
         finally:
             pipeline_active.set(0)
             pipeline_last_run.set_to_current_time()
@@ -79,8 +88,7 @@ class IngestionPipeline:
             files_deduplicated=stats.files_deduplicated,
             files_failed=stats.files_failed,
             records_produced=stats.records_produced,
-            records_inserted=stats.records_inserted,
-            errors=[e.__dict__ for e in stats.errors]
+            records_inserted=stats.records_inserted
         )
 
         return stats
@@ -112,11 +120,13 @@ class IngestionPipeline:
         if self._is_duplicate(checksum):
             logger.info("Duplicate file found, skipping", file_path=str(file.path))
             stats.files_deduplicated += 1
-            files_processed.labels(status=MetricStatus.DEDUPLICATED.value, file_type=file_type).inc()
+            files_processed.labels(status=MetricStatus.DEDUPLICATED, file_type=file_type).inc()
             return
 
         device: Device | None = None
+        device_id: int | None = None
         file_tracker: FileTracker | None = None
+        file_tracker_id: int | None = None
 
         if not self.dry_run:
 
@@ -128,50 +138,50 @@ class IngestionPipeline:
                 else:
                     logger.info("Found existing file tracker record", file_path=str(file.path), tracker_id=file_tracker.id, status=file_tracker.status)
 
-                    if file_tracker.status == FileStatus.PROCESSING.value:
+                    if file_tracker.status == FileStatus.PROCESSING:
                         logger.warning("Found stuck processing tracker, resetting", file_path=str(file.path), tracker_id=file_tracker.id)
-                    elif file_tracker.status == FileStatus.FAILED.value:
+                    elif file_tracker.status == FileStatus.FAILED:
                         logger.warning("Found previously failed tracker, retrying", file_path=str(file.path), tracker_id=file_tracker.id)
-                    
-                    file_tracker.status = FileStatus.PENDING.value
-                    session.flush()
-            
-            self.file_tracker_repo.mark_processing(session, file_tracker)
+                
+                self.file_tracker_repo.mark_processing(session, file_tracker)
 
-            # Create the Device entry if it doesn't exist, otherwise retrieve the device_id
-            with get_db_session(self.session_factory) as session:
+                # Upsert device record
                 device = self.device_repo.get_device_by_serial_number(session, sn)
                 if device is None:
                     device = self.device_repo.create_device(session, sn)
                     logger.info("Created new device record", serial_number=sn, device_id=device.id)
                 else:
                     logger.info("Found existing device record", serial_number=sn, device_id=device.id)
-        
+
+                device_id = device.id
+                file_tracker_id = file_tracker.id
 
         with file_processing_duration.labels(file_type=file_type).time():
             try:
-                inserted, produced, is_complete = self._stream_file(file, parser, device.id, file_tracker.id)
+                inserted, produced, is_complete = self._stream_file(file, parser, device_id, file_tracker_id)
                 stats.files_parsed += 1
                 stats.records_produced += produced
                 stats.records_inserted += inserted
 
                 if is_complete:
-                    files_processed.labels(status=MetricStatus.SUCCESS.value, file_type=file_type).inc()
+                    files_processed.labels(status=MetricStatus.SUCCESS, file_type=file_type).inc()
 
-                    if not self.dry_run and file_tracker.id is not None:
+                    if not self.dry_run and file_tracker_id is not None:
                         with get_db_session(self.session_factory) as session:
-                            self.file_tracker_repo.mark_done(session, file_tracker, rows_inserted=inserted)
+                            ft = session.get(FileTracker, file_tracker_id)
+                            self.file_tracker_repo.mark_done(session, ft, rows_inserted=inserted)
                 else:
                     logger.warning("File parsing completed with incomplete record insertion", file_path=str(file.path), produced=produced, inserted=inserted)
-                    files_processed.labels(status=MetricStatus.INCOMPLETE.value, file_type=file_type).inc()
+                    files_processed.labels(status=MetricStatus.INCOMPLETE, file_type=file_type).inc()
             
             except Exception as e:
                 stats.files_failed += 1
-                files_processed.labels(status=MetricStatus.FAILURE.value, file_type=file_type).inc()
+                files_processed.labels(status=MetricStatus.FAILURE, file_type=file_type).inc()
 
-                if not self.dry_run and file_tracker.id is not None:
+                if not self.dry_run and file_tracker_id is not None:
                     with get_db_session(self.session_factory) as session:
-                        self.file_tracker_repo.mark_failed(session, file_tracker, error_message=str(e))
+                        ft = session.get(FileTracker, file_tracker_id)
+                        self.file_tracker_repo.mark_failed(session, ft, error_message=str(e))
         
         # If excpetion is encountered before, retry mechanism can be implemented 
 
@@ -187,7 +197,7 @@ class IngestionPipeline:
                 row = session.execute(
                     select(FileTracker.id).where(
                         FileTracker.checksum_sha256 == checksum,
-                        FileTracker.status == FileStatus.DONE.value
+                        FileTracker.status == FileStatus.DONE
                     )
                 ).first()
                 return row is not None
@@ -237,7 +247,7 @@ class IngestionPipeline:
             return 0
 
         with get_db_session(self.session_factory) as session:
-            inserted = self.history_log_repo.upsert_history_logs(session, records, device_id, source_file_id)
+            inserted = self.history_log_repo.insert_history_logs(session, records, device_id, source_file_id)
             records_ingested.labels(table="history_log").inc(inserted)
             logger.debug("Flushed history logs to the database.", inserted=inserted)
             return inserted
@@ -251,7 +261,7 @@ class IngestionPipeline:
             return 0
 
         with get_db_session(self.session_factory) as session:
-            inserted = self.special_event_repo.upsert_special_events(session, records, device_id, source_file_id)
+            inserted = self.special_event_repo.insert_special_events(session, records, device_id, source_file_id)
             records_ingested.labels(table="special_event").inc(inserted)
             logger.debug("Flushed special events to the database.", inserted=inserted)
             return inserted
