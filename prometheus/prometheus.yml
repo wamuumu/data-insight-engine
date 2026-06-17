@@ -8,11 +8,11 @@ rule_files:
 scrape_configs:
   - job_name: etl-app
     static_configs:
-      - targets: ['data-insight-engine:8000'] # Scrape the app metrics endpoint
+      - targets: ['cli-app:8000'] # Scrape the app metrics endpoint
   
   - job_name: postgres
     static_configs:
-      - targets: ['postgres_exporter:9187'] # Scrape Postgres exporter metrics
+      - targets: ['postgres-exporter:9187'] # Scrape Postgres exporter metrics
   
   - job_name: prometheus
     static_configs:

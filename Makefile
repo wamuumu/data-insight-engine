@@ -20,6 +20,7 @@ DOCKER_DATA_VOLUMES := $(shell \
 )
 
 DOCKER_RUN = docker run --rm -it \
+	--name cli-app \
 	--env-file .env \
 	--network $(NETWORK_NAME) \
 	-p ${METRICS_PORT:-8000}:8000 \
