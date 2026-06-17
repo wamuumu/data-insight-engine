@@ -1,10 +1,8 @@
 from typing import Generator
 
 import pyarrow.parquet as pq
-import datetime
 
 from common.constants import PARQUET_DROP_COLUMNS
-from common.utils import construct_time
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, SpecialEventRecord
@@ -84,14 +82,6 @@ class ParquetParser(BaseParser):
                     mapped_key = _HEADER_MAPPING.get(key)
                     if mapped_key:
                         record_data[mapped_key] = value
-                
-                # Build a datetime.time object for SQLAlchemy Time compatibility.
-                hr = int(record_data.pop("hour", 0) or 0)
-                mn = int(record_data.pop("min", 0) or 0)
-                sc = int(record_data.pop("sec", 0) or 0)
-                cent = int(record_data.pop("cent", 0) or 0)
-                
-                record_data["time"] = construct_time(hr, mn, sc, cent)
 
                 yield SpecialEventRecord(source_file=file.path, data=record_data)
             
