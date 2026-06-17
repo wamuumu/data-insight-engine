@@ -18,6 +18,7 @@ def setup_logging(log_level: str, log_format: str):
     renderer = structlog.processors.JSONRenderer() if log_format.strip().lower() == "json" else structlog.dev.ConsoleRenderer(colors=False)
 
     shared_processors = [
+        structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),

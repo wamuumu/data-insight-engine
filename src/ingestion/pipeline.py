@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+import itertools
 from pathlib import Path
+import structlog
 from time import monotonic, sleep
+import threading
 
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
@@ -34,6 +37,9 @@ from monitoring.metrics import MetricStatus
 settings = load_settings()
 
 logger = get_logger(__name__)
+
+_worker_local = threading.local()
+_worker_counter = itertools.count(1)
 
 
 @dataclass
@@ -135,6 +141,11 @@ class IngestionPipeline:
         """
         Process a single file: determine the parser, check for duplicates, parse and persist records.
         """
+        structlog.contextvars.clear_contextvars()
+        if not hasattr(_worker_local, "worker_id"):
+            _worker_local.worker_id = next(_worker_counter)
+        structlog.contextvars.bind_contextvars(worker_id=_worker_local.worker_id)
+
         stats = PipelineStats(files_discovered=1)
         file_type = file.suffix.lstrip(".").lower()
         
@@ -216,6 +227,7 @@ class IngestionPipeline:
                 files_processed.labels(status=MetricStatus.FAILURE, file_type=file_type).inc()
                 self._quarantine_file(file_tracker_id, file_type, str(e))
 
+        structlog.contextvars.clear_contextvars()
         return stats
     
     def _quarantine_file(self, file_tracker_id: int | None, file_type: str, reason: str):
@@ -278,7 +290,7 @@ class IngestionPipeline:
         """
         total_inserted = 0
         total_produced = 0
-        batch = list[HistoryLogRecord | SpecialEventRecord] = []
+        batch: list[HistoryLogRecord | SpecialEventRecord] = []
         deadline = monotonic() + settings.file_retry_timeout
 
         for record in parser.parse(file):
@@ -331,7 +343,7 @@ class IngestionPipeline:
                 last_error = e
                 delay = min(
                     settings.db_retry_max_delay,
-                    settings.db_retry_initial_delay * (2 ** (attempt - 1))
+                    settings.db_retry_initial_delay * (2 ** (attempt))  # Exponential backoff
                 )
                 logger.warning("Batch insertion failed, will retry after delay.", attempt=attempt, batch_size=len(batch), delay=delay, error=str(e))
                 if monotonic() + delay < deadline:
@@ -364,8 +376,8 @@ class IngestionPipeline:
         """
         Insert a batch of records into the database within a transaction.
         """
-        history_logs = list[HistoryLogRecord] = []
-        special_events = list[SpecialEventRecord] = []
+        history_logs: list[HistoryLogRecord] = []
+        special_events: list[SpecialEventRecord] = []
 
         for record in batch:
             if isinstance(record, HistoryLogRecord):
@@ -386,3 +398,5 @@ class IngestionPipeline:
             records_ingested.labels(table="special_event").inc(len(special_events))
             logger.debug("Inserted special event records in transaction.", inserted=len(special_events))
             return inserted
+        
+        return 0  # No records to insert

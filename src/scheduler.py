@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 
 from common.logging import get_logger
 from ingestion.pipeline import IngestionPipeline
@@ -39,7 +40,8 @@ def build_scheduler(
         misfire_grace_time=300,     # 5 minutes
     )
 
-    scheduler.add_listener(_on_job_executed, _on_job_error)
+    scheduler.add_listener(_on_job_executed, EVENT_JOB_EXECUTED)
+    scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
 
     logger.info("Scheduler configured", cron_expression=str(cron_trigger))
     return scheduler

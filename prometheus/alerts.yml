@@ -18,7 +18,7 @@ groups:
       - alert: HighFileFailureRate
         expr: >
           rate(die_files_processed_total{status="failure"}[1h]) /
-          rate(die_files_processed_total[1h]) > 0.1
+          rate(die_files_processed_total{status=~"success|failure|incomplete"}[1h]) > 0.1
         for: 10m
         labels:
           severity: warning
