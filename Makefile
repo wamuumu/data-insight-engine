@@ -22,6 +22,7 @@ DOCKER_DATA_VOLUMES := $(shell \
 DOCKER_RUN = docker run --rm -it \
 	--env-file .env \
 	--network $(NETWORK_NAME) \
+	-p ${METRICS_PORT:-8000}:8000 \
 	$(DOCKER_DATA_VOLUMES) \
 	$(APP_IMAGE):latest
 

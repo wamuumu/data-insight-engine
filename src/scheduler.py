@@ -26,9 +26,9 @@ def build_scheduler(
         time_str (str): A time string defining the schedule for the pipeline execution.
     """
 
-    cron_trigger = _schedule_at(time_str, day_of_week=day_of_week, day=day, month=month, timezone="UTC")
+    cron_trigger = _schedule_at(time_str, day_of_week=day_of_week, day=day, month=month, timezone="Europe/Rome")
 
-    scheduler = BlockingScheduler(timezone="UTC")
+    scheduler = BlockingScheduler(timezone="Europe/Rome")
 
     scheduler.add_job(
         func=pipeline.run,
@@ -52,16 +52,16 @@ def _schedule_at(
         day_of_week: str | None = None,
         day: int | None = None,
         month: int | None = None,
-        timezone: str = "UTC"
+        timezone: str = "Europe/Rome"
     ) -> CronTrigger:
     """
     Build a CronTrigger based on the provided time string and optional parameters.
 
     Examples:
-        _schedule_at("02:00:00") # every day at 2 AM UTC
-        _schedule_at("14:30:00", day_of_week="mon-fri") # every weekday at 2:30 PM UTC
-        _schedule_at("00:00:00", day=1) # every first day of the month at midnight UTC
-        _schedule_at("10:00:00", day=25, month=12) # every Christmas at 10 AM UTC
+        _schedule_at("02:00:00") # every day at 2 AM (Europe/Rome timezone)
+        _schedule_at("14:30:00", day_of_week="mon-fri") # every weekday at 2:30 PM (Europe/Rome timezone)
+        _schedule_at("00:00:00", day=1) # every first day of the month at midnight (Europe/Rome timezone)
+        _schedule_at("10:00:00", day=25, month=12) # every Christmas at 10 AM (Europe/Rome timezone)
     """
     t = time.fromisoformat(time_str)
 

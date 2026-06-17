@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     max_batch_split_depth: int = Field(default=10, description="Maximum depth to split large batches for insertion into the database")
 
     # ── Scheduler ──────────────────────────────────────────────
-    data_root: str = Field(default="/data", description="Root directory to crawl for data files")
+    data_root: str = Field(default="data", description="Root directory to crawl for data files")
 
     # ── Metrics ───────────────────────────────────────────────
     metrics_port: int = Field(..., description="Port to expose Prometheus metrics on")

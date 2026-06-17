@@ -66,6 +66,17 @@ class PipelineStats:
         self.files_failed += other.files_failed
         self.records_produced += other.records_produced
         self.records_inserted += other.records_inserted
+    
+    def __str__(self, suffix: str = "") -> str:
+        return (
+            f"{suffix}_files_discovered={self.files_discovered}, "
+            f"{suffix}_files_parsed={self.files_parsed}, "
+            f"{suffix}_files_skipped={self.files_skipped}, "
+            f"{suffix}_files_deduplicated={self.files_deduplicated}, "
+            f"{suffix}_files_failed={self.files_failed}, "
+            f"{suffix}_records_produced={self.records_produced}, "
+            f"{suffix}_records_inserted={self.records_inserted}"
+        )   
 
 class IngestionPipeline:
     """
@@ -108,17 +119,16 @@ class IngestionPipeline:
                 with ThreadPoolExecutor(max_workers=settings.workers) as executor:
                     futures = [executor.submit(self._process_one, file) for file in files]
                     for future in as_completed(futures):
-                        stats.merge(future.result())
+                        local_stats = future.result()
+                        if local_stats:
+                            logger.info("File processing completed in thread.", thread_stats=local_stats.__str__(suffix="thread"))
+                            stats.merge(local_stats)
+                        else:
+                            logger.warning("File processing returned no stats in thread.")
 
             logger.info(
                 "Pipeline run completed",
-                files_discovered=stats.files_discovered,
-                files_parsed=stats.files_parsed,
-                files_skipped=stats.files_skipped,
-                files_deduplicated=stats.files_deduplicated,
-                files_failed=stats.files_failed,
-                records_produced=stats.records_produced,
-                records_inserted=stats.records_inserted
+                global_stats=stats.__str__(suffix="global"),
             )
             
             return stats
