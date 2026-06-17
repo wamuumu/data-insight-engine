@@ -16,13 +16,14 @@ CYAN := \033[36m
 # Define variables
 DOCKER_DATA_VOLUMES := $(shell \
     yq -r '.volumes[] | "-v " + .path + ":" + .target + (if .readonly then ":ro" else "" end)' \
-    $(MOUNTS_FILE) | \
+    $(MOUNTS_FILE) \
 )
 
+# TODO: Remove src volume binding
 DOCKER_RUN = docker run --rm -it \
 	--env-file .env \
 	--network $(NETWORK_NAME) \
-	-v $(PWD):/app \
+	-v ./src:/app/src \
 	$(DOCKER_DATA_VOLUMES) \
 	$(APP_IMAGE):latest
 
@@ -67,6 +68,8 @@ down:
 	@printf "$(GREEN)Containers stopped and removed$(RESET)\n"
 
 shell:
+	@mkdir -p logs && chmod 777 logs
+	@printf "$(GREEN)Created logs directory at:$(RESET) $(PWD)/logs\n"
 	@printf "$(GREEN)Opening shell in app container$(RESET)\n"
 	@$(DOCKER_RUN) bash
 	@printf "$(GREEN)Exited shell in app container$(RESET)\n"
