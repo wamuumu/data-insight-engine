@@ -61,8 +61,8 @@ up:
 	@printf "$(CYAN)Metrics$(RESET)        → http://localhost:${METRICS_PORT}/metrics\n"
 
 down:
-	@printf "$(GREEN)Stopping and removing containers$(RESET)\n"
-	@docker compose -p ${PROJECT_NAME} down
+	@printf "$(GREEN)Stopping and removing containers (with volumes)$(RESET)\n"
+	@docker compose -p ${PROJECT_NAME} down -v
 	@printf "$(GREEN)Containers stopped and removed$(RESET)\n"
 
 shell:

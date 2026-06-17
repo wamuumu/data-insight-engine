@@ -30,6 +30,13 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         rows = [self._special_event_to_row(r, device_id, source_file_id) for r in records]
         result = session.execute(insert(SpecialEvent).values(rows))
         return result.rowcount
+    
+    def delete_special_events_by_file(self, session: Session, source_file_id: int) -> int:
+        """
+        Delete special event records associated with a specific source file. Returns the number of records deleted.
+        """
+        result = session.query(SpecialEvent).filter(SpecialEvent.source_file_id == source_file_id).delete()
+        return result
 
     def _special_event_to_row(self, record: SpecialEventRecord, device_id: int, source_file_id: int | None) -> dict:
         """

@@ -1,0 +1,2 @@
+class BatchPersistenceError(Exception):
+    pass
