@@ -1,6 +1,11 @@
 volumes:
 
-  # Mandatory volumes 
+  # Development volumes
+  - path: ./src
+    target: /app/src
+    readonly: false
+
+  # Mandatory volumes
   - path: ./logs
     target: /app/logs
     readonly: false

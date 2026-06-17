@@ -19,11 +19,9 @@ DOCKER_DATA_VOLUMES := $(shell \
     $(MOUNTS_FILE) \
 )
 
-# TODO: Remove src volume binding
 DOCKER_RUN = docker run --rm -it \
 	--env-file .env \
 	--network $(NETWORK_NAME) \
-	-v ./src:/app/src \
 	$(DOCKER_DATA_VOLUMES) \
 	$(APP_IMAGE):latest
 
