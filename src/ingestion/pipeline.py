@@ -67,16 +67,19 @@ class PipelineStats:
         self.records_produced += other.records_produced
         self.records_inserted += other.records_inserted
     
-    def __str__(self, suffix: str = "") -> str:
-        return (
-            f"{suffix}_files_discovered={self.files_discovered}, "
-            f"{suffix}_files_parsed={self.files_parsed}, "
-            f"{suffix}_files_skipped={self.files_skipped}, "
-            f"{suffix}_files_deduplicated={self.files_deduplicated}, "
-            f"{suffix}_files_failed={self.files_failed}, "
-            f"{suffix}_records_produced={self.records_produced}, "
-            f"{suffix}_records_inserted={self.records_inserted}"
-        )   
+    def to_dict(self, suffix: str = "") -> dict:
+        """
+        Convert the PipelineStats to a dictionary for logging or metrics purposes.
+        """        
+        return {
+            f"{suffix}_files_discovered": self.files_discovered,
+            f"{suffix}_files_parsed": self.files_parsed,
+            f"{suffix}_files_skipped": self.files_skipped,
+            f"{suffix}_files_deduplicated": self.files_deduplicated,
+            f"{suffix}_files_failed": self.files_failed,
+            f"{suffix}_records_produced": self.records_produced,
+            f"{suffix}_records_inserted": self.records_inserted
+        }
 
 class IngestionPipeline:
     """
@@ -121,15 +124,12 @@ class IngestionPipeline:
                     for future in as_completed(futures):
                         local_stats = future.result()
                         if local_stats:
-                            logger.info("File processing completed in thread.", thread_stats=local_stats.__str__(suffix="thread"))
+                            logger.info("File processing completed in thread.", **local_stats.to_dict(suffix="thread"))
                             stats.merge(local_stats)
                         else:
                             logger.warning("File processing returned no stats in thread.")
 
-            logger.info(
-                "Pipeline run completed",
-                global_stats=stats.__str__(suffix="global"),
-            )
+            logger.info("Pipeline run completed", **stats.to_dict(suffix="total"))
             
             return stats
         finally:
