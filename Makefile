@@ -17,12 +17,12 @@ CYAN := \033[36m
 DOCKER_DATA_VOLUMES := $(shell \
     yq -r '.volumes[] | "-v " + .path + ":" + .target + (if .readonly then ":ro" else "" end)' \
     $(MOUNTS_FILE) | \
-    sed 's|\$$(PWD)|$(PWD)|g' \
 )
 
 DOCKER_RUN = docker run --rm -it \
 	--env-file .env \
 	--network $(NETWORK_NAME) \
+	-v $(PWD):/app \
 	$(DOCKER_DATA_VOLUMES) \
 	$(APP_IMAGE):latest
 

@@ -1,12 +1,5 @@
 volumes:
   
-  # Mandatory mounts  
-  - path: $(PWD)
-    target: /app
-    readonly: false
-
-  # Optional mounts (for data)
-  # Remember to set readonly to true for data mounts to prevent accidental modifications
-  - path: your/data/path
-    target: /app/data/path
-    readonly: true
+  - path: your/data/path        # Replace with the actual path to your data on the host machine
+    target: /app/data/path      # Replace with the desired path inside the container
+    readonly: true              # One of: true, false. Set to true to prevent modifications to the data from within the container
