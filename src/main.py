@@ -70,13 +70,13 @@ def handle_scheduler(args: argparse.Namespace):
 
 if __name__ == "__main__":
 
-    # Start Prometheus metrics server
-    start_http_server(settings.metrics_port)
-    logger.info("Prometheus metrics server started", port=str(settings.metrics_port))
-
     # Build and parse command-line arguments
     arg_parser = build_parser()
     args = arg_parser.parse_args()
+
+    # Start Prometheus metrics server
+    start_http_server(settings.metrics_port)
+    logger.info("Prometheus metrics server started", port=str(settings.metrics_port))
     
     # Run the appropriate command handler
     args.func(args)
