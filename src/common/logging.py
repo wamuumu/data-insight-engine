@@ -51,7 +51,7 @@ def setup_logging(log_level: str, log_format: str):
     if not _LOG_DIR.exists():
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
+    file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8", delay=True)
     file_handler.setFormatter(formatter)
     handlers.append(file_handler)
     
