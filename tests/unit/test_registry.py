@@ -1,10 +1,16 @@
+"""
+Unit tests for src/ingestion/registry.py
+
+Covers:
+  - Correct parser type returned for each supported extension
+  - None returned for unsupported extensions
+  - Multiple supported files in the same tmp dir each get the right parser
+"""
 from __future__ import annotations
 
 from pathlib import Path
 
-import openpyxl
-import pyarrow as pa
-import pyarrow.parquet as pq
+import pytest
 
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.parquet import ParquetParser
@@ -12,40 +18,25 @@ from ingestion.parsers.xlsx import XLSXParser
 from ingestion.registry import get_parser
 
 
-def _write_xlsx(path: Path):
-    workbook = openpyxl.Workbook()
-    worksheet = workbook.active
-    worksheet.title = "Sheet1"
-    worksheet.append(["Event ID", "Value", "Date", "Time"])
-    worksheet.append([1, 100, "17/06/2026", "08:00:00.000"])
-    workbook.save(path)
+def _stub(tmp_path: Path, name: str) -> BaseFile:
+    """Create a zero-byte file and wrap it in a BaseFile."""
+    p = tmp_path / name
+    p.write_bytes(b"stub")
+    return BaseFile(p)
 
 
-def _write_parquet(path: Path):
-    table = pa.table({"ACC_X": [1.0], "lat": [45.1]})
-    pq.write_table(table, path)
+class TestGetParser:
+    def test_xlsx_extension_returns_xlsx_parser(self, tmp_path: Path) -> None:
+        assert isinstance(get_parser(_stub(tmp_path, "x.xlsx")), XLSXParser)
 
+    def test_parquet_extension_returns_parquet_parser(self, tmp_path: Path) -> None:
+        assert isinstance(get_parser(_stub(tmp_path, "x.parquet")), ParquetParser)
 
-def test_get_parser_selects_xlsx_parser(tmp_path):
-    path = tmp_path / "device_B12345678.xlsx"
-    _write_xlsx(path)
+    @pytest.mark.parametrize("name", ["x.csv", "x.txt", "x.json", "x.pdf", "x"])
+    def test_unsupported_extension_returns_none(self, tmp_path: Path, name: str) -> None:
+        assert get_parser(_stub(tmp_path, name)) is None
 
-    parser = get_parser(BaseFile(path))
-
-    assert isinstance(parser, XLSXParser)
-
-
-def test_get_parser_selects_parquet_parser(tmp_path):
-    path = tmp_path / "device_B12345678.parquet"
-    _write_parquet(path)
-
-    parser = get_parser(BaseFile(path))
-
-    assert isinstance(parser, ParquetParser)
-
-
-def test_get_parser_returns_none_for_unsupported_extension(tmp_path):
-    path = tmp_path / "device_B12345678.txt"
-    path.write_text("ignored")
-
-    assert get_parser(BaseFile(path)) is None
+    def test_uppercase_extension_is_handled_correctly(self, tmp_path: Path) -> None:
+        # BaseFile lowercases the suffix, so the registry must also work
+        f = _stub(tmp_path, "x.XLSX")
+        assert isinstance(get_parser(f), XLSXParser)
