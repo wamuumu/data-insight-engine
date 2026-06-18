@@ -13,7 +13,9 @@ class DeviceRepository(BaseRepository[Device]):
     def __init__(self):
         super().__init__(Device)
 
-    def get_device_by_serial_number(self, session: Session, serial_number: str) -> Device | None:
+    def get_device_by_serial_number(
+        self, session: Session, serial_number: str
+    ) -> Device | None:
         """
         Retrieve a device by its serial number.
         """

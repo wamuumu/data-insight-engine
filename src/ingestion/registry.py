@@ -14,6 +14,7 @@ _PARSER_FACTORIES: list = [
     lambda: ParquetParser(batch_size=_settings.parquet_batch_size),
 ]
 
+
 def get_parser(file: BaseFile) -> BaseParser | None:
     """
     Factory function that returns the first appropriate parser for a given file, or None.

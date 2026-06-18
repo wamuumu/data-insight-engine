@@ -6,10 +6,11 @@ from pathlib import Path
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src")) # Ensure src is in the path
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "src")
+)  # Ensure src is in the path
 
 from db.models.base import BaseModel
-import db.models    # Import all models
 
 config = context.config
 
@@ -38,6 +39,7 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
+
 def run_migrations_online():
     """Run migrations with a live DB connection"""
     connectable = engine_from_config(
@@ -54,6 +56,7 @@ def run_migrations_online():
         )
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

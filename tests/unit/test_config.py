@@ -7,6 +7,7 @@ Covers:
   - All valid log levels are accepted
   - Default field values when optional settings are omitted
 """
+
 from __future__ import annotations
 
 import pytest

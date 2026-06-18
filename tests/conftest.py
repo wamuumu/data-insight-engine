@@ -5,6 +5,7 @@ Fixtures are scoped deliberately:
   - session-scoped: expensive one-time setup (DB engine, schema creation).
   - function-scoped: per-test isolation (sessions, repositories).
 """
+
 from __future__ import annotations
 
 import os
@@ -16,6 +17,12 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+import pytest
+from sqlalchemy.orm import sessionmaker
+
+from db.models.base import BaseModel
+from db.session import build_engine, get_db_session
+
 # ── Minimal env vars so Settings() doesn't crash during collection ──────────
 _TEST_DB_URL = "postgresql://postgres:postgres@localhost:5432/test_db"
 
@@ -24,14 +31,9 @@ os.environ.setdefault("DB_USER", "postgres")
 os.environ.setdefault("DB_PASSWORD", "postgres")
 os.environ.setdefault("DB_NAME", "test_db")
 
-import pytest
-from sqlalchemy.orm import sessionmaker
-
-from db.models.base import BaseModel
-from db.session import build_engine, get_db_session
-
 
 # ── Database fixtures ───────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def pg_url() -> str:
@@ -76,6 +78,7 @@ def db_session(session_factory):
 
 
 # ── XLSX / Parquet helper factories ─────────────────────────────────────────
+
 
 @pytest.fixture
 def make_xlsx(tmp_path):

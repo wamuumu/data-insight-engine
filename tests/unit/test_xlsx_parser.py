@@ -8,6 +8,7 @@ Organised into:
   4. _build_firmware_segments — all transition / anomaly cases documented in the code
   5. _make_firmware_lookup   — binary-search correctness, sentinel for out-of-range
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -26,6 +27,7 @@ from ingestion.parsers.xlsx import XLSXParser
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_file(tmp_path: Path) -> BaseFile:
     """Stub BaseFile pointing to a placeholder file (for index/segment tests)."""
@@ -55,6 +57,7 @@ def _write_xlsx(
 
 # ── 1. can_handle ─────────────────────────────────────────────────────────────
 
+
 class TestXLSXParserCanHandle:
     def test_true_for_xlsx(self, tmp_path: Path) -> None:
         p = tmp_path / "x.xlsx"
@@ -74,6 +77,7 @@ class TestXLSXParserCanHandle:
 
 
 # ── 2. parse (end-to-end) ─────────────────────────────────────────────────────
+
 
 class TestXLSXParserParse:
     def test_yields_one_record_per_data_row(self, tmp_path: Path) -> None:
@@ -96,7 +100,9 @@ class TestXLSXParserParse:
         records = list(XLSXParser().parse(BaseFile(path)))
         assert all(isinstance(r, HistoryLogRecord) for r in records)
 
-    def test_firmware_version_propagated_within_on_off_segment(self, tmp_path: Path) -> None:
+    def test_firmware_version_propagated_within_on_off_segment(
+        self, tmp_path: Path
+    ) -> None:
         path = _write_xlsx(
             tmp_path / "device_B12345678.xlsx",
             rows=[
@@ -187,6 +193,7 @@ class TestXLSXParserParse:
 
 # ── 3. _build_firmware_index ──────────────────────────────────────────────────
 
+
 class TestBuildFirmwareIndex:
     def test_returns_empty_when_event_id_column_missing(self, tmp_path: Path) -> None:
         file = _make_file(tmp_path)
@@ -203,7 +210,7 @@ class TestBuildFirmwareIndex:
         header = ["Event ID", "Value"]
         rows = [
             (SWITCH_ON_EVENT_ID, 100),
-            (99, 999),               # non-switch — excluded
+            (99, 999),  # non-switch — excluded
             (SWITCH_OFF_EVENT_ID, 200),
         ]
         events = XLSXParser()._build_firmware_index(file, header, rows)
@@ -227,6 +234,7 @@ class TestBuildFirmwareIndex:
 
 
 # ── 4. _build_firmware_segments ───────────────────────────────────────────────
+
 
 class TestBuildFirmwareSegments:
     """
@@ -294,7 +302,7 @@ class TestBuildFirmwareSegments:
         file = _make_file(tmp_path)
         events = [
             (0, SWITCH_ON_EVENT_ID, 100),
-            (2, SWITCH_ON_EVENT_ID, 200),   # ON→ON anomaly
+            (2, SWITCH_ON_EVENT_ID, 200),  # ON→ON anomaly
             (3, SWITCH_OFF_EVENT_ID, 300),
             (4, SWITCH_OFF_EVENT_ID, 400),  # OFF→OFF anomaly
             (5, SWITCH_ON_EVENT_ID, 500),
@@ -322,6 +330,7 @@ class TestBuildFirmwareSegments:
 
 
 # ── 5. _make_firmware_lookup ──────────────────────────────────────────────────
+
 
 class TestMakeFirmwareLookup:
     def _lookup(self, segments):

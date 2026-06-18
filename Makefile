@@ -1,19 +1,43 @@
-# Load environment variables
-include .env
+# ─────────────────────────────────────────────
+# Environment
+# ─────────────────────────────────────────────
 
-# Make settings
+-include .env
+export
+
 MAKEFLAGS += --no-print-directory
 SHELL := /bin/bash
-.SHELLFLAGS := -O extglob -c
 
-# Terminal colors
+# ─────────────────────────────────────────────
+# Colors
+# ─────────────────────────────────────────────
+
 RESET := \033[0m
 GREEN := \033[32m
 BLUE := \033[34m
 YELLOW := \033[33m
 CYAN := \033[36m
 
-# Define variables
+# ─────────────────────────────────────────────
+# Safety checks
+# ─────────────────────────────────────────────
+
+ifndef PROJECT_NAME
+$(error PROJECT_NAME is not set in .env)
+endif
+
+ifndef APP_IMAGE
+$(error APP_IMAGE is not set in .env)
+endif
+
+ifndef NETWORK_NAME
+$(error NETWORK_NAME is not set in .env)
+endif
+
+# ─────────────────────────────────────────────
+# Docker configuration
+# ─────────────────────────────────────────────
+
 DOCKER_DATA_VOLUMES := $(shell \
     yq -r '.volumes[] | "-v " + .path + ":" + .target + (if .readonly then ":ro" else "" end)' \
     $(MOUNTS_FILE) \
@@ -27,7 +51,7 @@ DOCKER_RUN = docker run --rm -it \
 	$(DOCKER_DATA_VOLUMES) \
 	$(APP_IMAGE):latest
 
-.PHONY: help build up down shell migrate migrate-new db
+.PHONY: help build up down shell db migrate migrate-new test-unit test-integration test lint lint-fix format typecheck
 
 # ── Default target ─────────────────────────────────────────────
 help:
@@ -38,11 +62,19 @@ help:
 	@printf "  $(GREEN)make up$(RESET)\t\t\tStart all services in detached mode\n"
 	@printf "  $(GREEN)make down$(RESET)\t\t\tStop and remove containers\n"
 	@printf "  $(GREEN)make shell$(RESET)\t\t\tOpen a shell in the app container\n"
+	@printf "  $(GREEN)make db$(RESET)\t\t\tConnect to the database container\n"
 	@echo ""
 	@printf "  $(YELLOW)make migrate$(RESET)\t\t\tApply all pending database migrations\n"
 	@printf "  $(YELLOW)make migrate-new m=<msg>$(RESET)\tGenerate a new migration (autogenerate with message)\n"
 	@echo ""
-	@printf "  $(BLUE)make db$(RESET)\t\t\tConnect to the database container\n"
+	@printf "  $(BLUE)make test-unit$(RESET)\t\tRun unit tests\n"
+	@printf "  $(BLUE)make test-integration$(RESET)\t\tRun integration tests\n"
+	@printf "  $(BLUE)make test$(RESET)\t\t\tRun all tests\n"
+	@echo ""
+	@printf "  $(CYAN)make lint$(RESET)\t\t\tRun linter checks\n"
+	@printf "  $(CYAN)make lint-fix$(RESET)\t\t\tRun linter checks and fix issues\n"
+	@printf "  $(CYAN)make format$(RESET)\t\t\tFormat code\n"
+	@printf "  $(CYAN)make typecheck$(RESET)\t\tRun type checks\n"
 	@echo ""
 
 # ── Docker lifecycle ───────────────────────────────────────────
@@ -51,7 +83,6 @@ build:
 	@docker build --no-cache \
 		-t ${APP_IMAGE}:latest \
 		-f docker/app/Dockerfile .
-	@printf "$(GREEN)Docker image built successfully$(RESET)\n"
 
 up:
 	@mkdir -p logs && chmod 777 logs
@@ -60,31 +91,49 @@ up:
 	@docker compose -p ${PROJECT_NAME} up -d
 	@printf "$(CYAN)Grafana$(RESET)        → http://localhost:3000\n"
 	@printf "$(CYAN)Prometheus$(RESET)     → http://localhost:9090\n"
-	@printf "$(CYAN)Metrics$(RESET)        → http://localhost:${METRICS_PORT}/metrics\n"
 
 down:
-	@printf "$(GREEN)Stopping and removing containers (with volumes)$(RESET)\n"
 	@docker compose -p ${PROJECT_NAME} down -v
-	@printf "$(GREEN)Containers stopped and removed$(RESET)\n"
 
 shell:
-	@mkdir -p logs && chmod 777 logs
-	@printf "$(GREEN)Created logs directory at:$(RESET) $(PWD)/logs\n"
-	@printf "$(GREEN)Opening shell in app container$(RESET)\n"
 	@$(DOCKER_RUN) bash
-	@printf "$(GREEN)Exited shell in app container$(RESET)\n"
+
+db:
+	@docker compose -p ${PROJECT_NAME} exec postgres psql -U ${DB_USER} -d ${DB_NAME}
 
 migrate:
 	@printf "$(YELLOW)Applying database migrations$(RESET)\n"
 	@$(DOCKER_RUN) alembic -c alembic.ini upgrade head
-	@printf "$(GREEN)Database migrations applied successfully$(RESET)\n"
 
 migrate-new:
-	@printf "$(YELLOW)Generating new migration with message: $(m)$(RESET)\n"
+	ifndef m
+		$(error You must pass migration message: make migrate-new m="message")
+	endif
+	@printf "$(YELLOW)Generating migration: $(m)$(RESET)\n"
 	@$(DOCKER_RUN) alembic -c alembic.ini revision --autogenerate -m "$(m)"
-	@printf "$(GREEN)New migration generated successfully$(RESET)\n"
 
-db:
-	@printf "$(GREEN)Connecting to the database container$(RESET)\n"
-	@docker compose -p ${PROJECT_NAME} exec postgres psql -U ${DB_USER} -d ${DB_NAME}
-	@printf "$(GREEN)Exited database container$(RESET)\n"
+test-unit:
+	@printf "$(BLUE)Running unit tests$(RESET)\n"
+	@pytest tests/unit
+
+test-integration:
+	@printf "$(BLUE)Running integration tests$(RESET)\n"
+	@pytest tests/integration
+
+test: test-unit test-integration
+
+lint:
+	@printf "$(CYAN)Running linter checks$(RESET)\n"
+	@ruff check .
+
+lint-fix:
+	@printf "$(CYAN)Running linter checks and fixing issues$(RESET)\n"
+	@ruff check . --fix
+
+format:
+	@printf "$(CYAN)Formatting code$(RESET)\n"
+	@ruff format .
+
+typecheck:
+	@printf "$(CYAN)Running type checks$(RESET)\n"
+	@mypy .

@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 from datetime import datetime, time, timezone
 
+
 def extract_serial_number(path: Path) -> str | None:
     """
     Extract the serial number from the file path using a regex pattern.
@@ -11,6 +12,7 @@ def extract_serial_number(path: Path) -> str | None:
     _SN_PATTERN = re.compile(r"(B[0-9A-F]{8})")
     match = _SN_PATTERN.search(str(path))
     return match.group() if match else None
+
 
 def compute_sha256(path: Path) -> bytes | None:
     """
@@ -27,18 +29,21 @@ def compute_sha256(path: Path) -> bytes | None:
     except OSError:
         return None
 
-def combine_date_time(date_str: str, time_str: str, format_str: str = "%d/%m/%Y %H:%M:%S.%f") -> datetime:
+
+def combine_date_time(
+    date_str: str, time_str: str, format_str: str = "%d/%m/%Y %H:%M:%S.%f"
+) -> datetime:
     """
     Combine date and time strings into a single datetime object.
     """
     try:
         dt = datetime.strptime(f"{date_str} {time_str}", format_str)
-    except ValueError as e:
-        # fallback without milliseconds
+    except ValueError:
         dt = datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M:%S")
-    
+
     return dt.replace(tzinfo=timezone.utc)
-    
+
+
 def construct_time(hour: int, minute: int, second: int, centisecond: int) -> time:
     """
     Construct a datetime.time object from hour, minute, second, and centisecond components.

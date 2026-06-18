@@ -19,26 +19,32 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         session: Session,
         records: list[HistoryLogRecord],
         device_id: int,
-        source_file_id: int | None = None
+        source_file_id: int | None = None,
     ) -> int:
         """
         Batch-insert history log records into the database. Returns the number of records successfully inserted.
         """
         if not records:
             return 0
-        
+
         rows = [self._history_log_to_row(r, device_id, source_file_id) for r in records]
         result = session.execute(insert(HistoryLog).values(rows))
         return result.rowcount
-    
+
     def delete_history_logs_by_file(self, session: Session, source_file_id: int) -> int:
         """
         Delete history log records associated with a specific source file. Returns the number of records deleted.
         """
-        result = session.query(HistoryLog).filter(HistoryLog.source_file_id == source_file_id).delete()
+        result = (
+            session.query(HistoryLog)
+            .filter(HistoryLog.source_file_id == source_file_id)
+            .delete()
+        )
         return result
 
-    def _history_log_to_row(self, record: HistoryLogRecord, device_id: int, source_file_id: int | None) -> dict:
+    def _history_log_to_row(
+        self, record: HistoryLogRecord, device_id: int, source_file_id: int | None
+    ) -> dict:
         """
         Convert a HistoryLogRecord to a dictionary suitable for database insertion.
         """

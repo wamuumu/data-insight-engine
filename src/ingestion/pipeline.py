@@ -30,7 +30,7 @@ from monitoring.metrics import (
     files_processed,
     pipeline_active,
     pipeline_last_run,
-    records_ingested
+    records_ingested,
 )
 from monitoring.metrics import MetricStatus
 
@@ -47,13 +47,16 @@ class PipelineStats:
     """
     Tracks statistics about the ingestion pipeline execution.
     """
-    files_discovered: int = 0                           # Total number of files discovered by the crawler in the specified root directory
-    files_parsed: int = 0                               # Total number of files successfully parsed and processed
-    files_skipped: int = 0                              # No parser found
-    files_deduplicated: int = 0                         # Alredy processed, skipped based on identity
-    files_failed: int = 0                               # Files that failed to process due to errors
-    records_produced: int = 0                           # Total number of records produced by parsers
-    records_inserted: int = 0                           # Total number of records successfully inserted into the database
+
+    files_discovered: int = 0  # Total number of files discovered by the crawler in the specified root directory
+    files_parsed: int = 0  # Total number of files successfully parsed and processed
+    files_skipped: int = 0  # No parser found
+    files_deduplicated: int = 0  # Alredy processed, skipped based on identity
+    files_failed: int = 0  # Files that failed to process due to errors
+    records_produced: int = 0  # Total number of records produced by parsers
+    records_inserted: int = (
+        0  # Total number of records successfully inserted into the database
+    )
 
     def merge(self, other: PipelineStats):
         """
@@ -66,11 +69,11 @@ class PipelineStats:
         self.files_failed += other.files_failed
         self.records_produced += other.records_produced
         self.records_inserted += other.records_inserted
-    
+
     def to_dict(self, suffix: str = "") -> dict:
         """
         Convert the PipelineStats to a dictionary for logging or metrics purposes.
-        """        
+        """
         return {
             f"{suffix}_files_discovered": self.files_discovered,
             f"{suffix}_files_parsed": self.files_parsed,
@@ -78,25 +81,29 @@ class PipelineStats:
             f"{suffix}_files_deduplicated": self.files_deduplicated,
             f"{suffix}_files_failed": self.files_failed,
             f"{suffix}_records_produced": self.records_produced,
-            f"{suffix}_records_inserted": self.records_inserted
+            f"{suffix}_records_inserted": self.records_inserted,
         }
+
 
 class IngestionPipeline:
     """
     Orchestrates the crawling and parsing of files for ingestion.
     """
+
     def __init__(
-            self, 
-            root: Path, 
-            session_factory: sessionmaker, 
-            dry_run: bool = False, 
-            file_mode: bool = False
+        self,
+        root: Path,
+        session_factory: sessionmaker,
+        dry_run: bool = False,
+        file_mode: bool = False,
     ):
         self.root = root
         self.session_factory = session_factory
         self.dry_run = dry_run
         self.file_mode = file_mode
-        self.crawler = DriveCrawler(root) if not file_mode else None  # Crawler is not needed in file mode
+        self.crawler = (
+            DriveCrawler(root) if not file_mode else None
+        )  # Crawler is not needed in file mode
         self.device_repo = DeviceRepository()
         self.file_tracker_repo = FileTrackerRepository()
         self.history_log_repo = HistoryLogRepository()
@@ -110,43 +117,58 @@ class IngestionPipeline:
             if not files:
                 logger.info("No files discovered for processing.", root=str(self.root))
                 return PipelineStats()  # Return empty stats if no files are found
-            
+
             stats = PipelineStats()
             if settings.workers <= 1 or len(files) == 1:
                 # Single-thread multi-file or single-file
-                logger.info("Running in single-threaded mode.", workers=settings.workers, files=len(files))
+                logger.info(
+                    "Running in single-threaded mode.",
+                    workers=settings.workers,
+                    files=len(files),
+                )
                 for file in files:
                     stats.merge(self._process_one(file))
             else:
                 # Multi-thread multi-file
                 with ThreadPoolExecutor(max_workers=settings.workers) as executor:
-                    futures = [executor.submit(self._process_one, file) for file in files]
+                    futures = [
+                        executor.submit(self._process_one, file) for file in files
+                    ]
                     for future in as_completed(futures):
                         local_stats = future.result()
                         if local_stats:
-                            logger.info("File processing completed in thread.", **local_stats.to_dict(suffix="thread"))
+                            logger.info(
+                                "File processing completed in thread.",
+                                **local_stats.to_dict(suffix="thread"),
+                            )
                             stats.merge(local_stats)
                         else:
-                            logger.warning("File processing returned no stats in thread.")
+                            logger.warning(
+                                "File processing returned no stats in thread."
+                            )
 
             logger.info("Pipeline run completed", **stats.to_dict(suffix="total"))
-            
+
             return stats
         finally:
             pipeline_active.set(0)
             pipeline_last_run.set_to_current_time()
-    
+
     def _discover_files(self) -> list[BaseFile]:
         """
         Discover files in the root directory using the crawler.
         """
         if self.file_mode:
-            logger.info("File mode enabled. Skipping file discovery.", root=str(self.root))
+            logger.info(
+                "File mode enabled. Skipping file discovery.", root=str(self.root)
+            )
             return [BaseFile(self.root)]  # Return the single file as a list
         else:
-            logger.info("File mode disabled. Starting file discovery.", root=str(self.root))
+            logger.info(
+                "File mode disabled. Starting file discovery.", root=str(self.root)
+            )
             return list(self.crawler.crawl())
-    
+
     def _process_one(self, file: BaseFile) -> PipelineStats:
         """
         Process a single file: determine the parser, check for duplicates, parse and persist records.
@@ -158,7 +180,7 @@ class IngestionPipeline:
 
         stats = PipelineStats(files_discovered=1)
         file_type = file.suffix.lstrip(".").lower()
-        
+
         parser = get_parser(file)
         if not parser:
             logger.info("No parser found for file, skipping", file_path=str(file.path))
@@ -167,106 +189,185 @@ class IngestionPipeline:
 
         sn = extract_serial_number(file.path)
         if sn is None:
-            logger.error("Could not extract serial number from file path, skipping", file_path=str(file.path))
+            logger.error(
+                "Could not extract serial number from file path, skipping",
+                file_path=str(file.path),
+            )
             stats.files_failed += 1
             return stats
-        
+
         checksum = compute_sha256(file.path)
         if checksum is None:
-            logger.error("Could not compute checksum for file, skipping", file_path=str(file.path))
+            logger.error(
+                "Could not compute checksum for file, skipping",
+                file_path=str(file.path),
+            )
             stats.files_failed += 1
             return stats
-        
+
         if self._is_duplicate(checksum):
             logger.info("Duplicate file found, skipping", file_path=str(file.path))
             stats.files_deduplicated += 1
-            files_processed.labels(status=MetricStatus.DEDUPLICATED, file_type=file_type).inc()
+            files_processed.labels(
+                status=MetricStatus.DEDUPLICATED, file_type=file_type
+            ).inc()
             return stats
 
         device_id: int | None = None
         file_tracker_id: int | None = None
 
         if not self.dry_run:
-
             with get_db_session(self.session_factory) as session:
-                file_tracker = self.file_tracker_repo.get_file_tracker_by_checksum(session, checksum)
+                file_tracker = self.file_tracker_repo.get_file_tracker_by_checksum(
+                    session, checksum
+                )
                 if file_tracker is None:
-                    file_tracker = self.file_tracker_repo.create_file_tracker(session, str(file.path), checksum)
-                    logger.info("Created new file tracker record", file_path=str(file.path), tracker_id=file_tracker.id)
+                    file_tracker = self.file_tracker_repo.create_file_tracker(
+                        session, str(file.path), checksum
+                    )
+                    logger.info(
+                        "Created new file tracker record",
+                        file_path=str(file.path),
+                        tracker_id=file_tracker.id,
+                    )
                 else:
-                    logger.info("Found existing file tracker record", file_path=str(file.path), tracker_id=file_tracker.id, status=file_tracker.status)
-                
+                    logger.info(
+                        "Found existing file tracker record",
+                        file_path=str(file.path),
+                        tracker_id=file_tracker.id,
+                        status=file_tracker.status,
+                    )
+
                 self.file_tracker_repo.mark_processing(session, file_tracker)
 
                 # Upsert device record
                 device = self.device_repo.get_device_by_serial_number(session, sn)
                 if device is None:
                     device = self.device_repo.create_device(session, sn)
-                    logger.info("Created new device record", serial_number=sn, device_id=device.id)
+                    logger.info(
+                        "Created new device record",
+                        serial_number=sn,
+                        device_id=device.id,
+                    )
                 else:
-                    logger.info("Found existing device record", serial_number=sn, device_id=device.id)
+                    logger.info(
+                        "Found existing device record",
+                        serial_number=sn,
+                        device_id=device.id,
+                    )
 
                 device_id = device.id
                 file_tracker_id = file_tracker.id
 
         with file_processing_duration.labels(file_type=file_type).time():
             try:
-                inserted, produced, is_complete = self._stream_file(file, parser, device_id, file_tracker_id)
+                inserted, produced, is_complete = self._stream_file(
+                    file, parser, device_id, file_tracker_id
+                )
                 stats.files_parsed += 1
                 stats.records_produced += produced
                 stats.records_inserted += inserted
 
                 if is_complete:
-                    files_processed.labels(status=MetricStatus.SUCCESS, file_type=file_type).inc()
+                    files_processed.labels(
+                        status=MetricStatus.SUCCESS, file_type=file_type
+                    ).inc()
 
                     if not self.dry_run and file_tracker_id is not None:
                         with get_db_session(self.session_factory) as session:
                             ft = session.get(FileTracker, file_tracker_id)
                             if ft is not None:
-                                self.file_tracker_repo.mark_done(session, ft, rows_inserted=inserted)
+                                self.file_tracker_repo.mark_done(
+                                    session, ft, rows_inserted=inserted
+                                )
                             else:
-                                logger.error("FileTracker record not found when marking as done", file_tracker_id=file_tracker_id)
+                                logger.error(
+                                    "FileTracker record not found when marking as done",
+                                    file_tracker_id=file_tracker_id,
+                                )
                 else:
-                    logger.warning("File parsing completed with incomplete record insertion", file_path=str(file.path), produced=produced, inserted=inserted)
+                    logger.warning(
+                        "File parsing completed with incomplete record insertion",
+                        file_path=str(file.path),
+                        produced=produced,
+                        inserted=inserted,
+                    )
                     stats.files_failed += 1
-                    files_processed.labels(status=MetricStatus.INCOMPLETE, file_type=file_type).inc()
-                    self._quarantine_file(file_tracker_id, file_type, f"Incomplete record insertion: produced={produced}, inserted={inserted}")
-            
+                    files_processed.labels(
+                        status=MetricStatus.INCOMPLETE, file_type=file_type
+                    ).inc()
+                    self._quarantine_file(
+                        file_tracker_id,
+                        file_type,
+                        f"Incomplete record insertion: produced={produced}, inserted={inserted}",
+                    )
+
             except Exception as e:
                 stats.files_failed += 1
-                files_processed.labels(status=MetricStatus.FAILURE, file_type=file_type).inc()
+                files_processed.labels(
+                    status=MetricStatus.FAILURE, file_type=file_type
+                ).inc()
                 self._quarantine_file(file_tracker_id, file_type, str(e))
 
         structlog.contextvars.clear_contextvars()
         return stats
-    
-    def _quarantine_file(self, file_tracker_id: int | None, file_type: str, reason: str):
+
+    def _quarantine_file(
+        self, file_tracker_id: int | None, file_type: str, reason: str
+    ):
         """
         Mark the file as failed and provide the reason for quarantine.
         """
         if self.dry_run or file_tracker_id is None:
-            logger.debug("Dry run enabled or no file tracker ID - skipping quarantine.", file_tracker_id=file_tracker_id, reason=reason)
+            logger.debug(
+                "Dry run enabled or no file tracker ID - skipping quarantine.",
+                file_tracker_id=file_tracker_id,
+                reason=reason,
+            )
             return
-        
+
         try:
             with get_db_session(self.session_factory) as session:
                 if file_type == "xlsx":
-                    rows = self.history_log_repo.delete_history_logs_by_file(session, file_tracker_id)
-                    logger.info("Deleted history log records associated with quarantined file", file_tracker_id=file_tracker_id, deleted_rows=rows)
+                    rows = self.history_log_repo.delete_history_logs_by_file(
+                        session, file_tracker_id
+                    )
+                    logger.info(
+                        "Deleted history log records associated with quarantined file",
+                        file_tracker_id=file_tracker_id,
+                        deleted_rows=rows,
+                    )
                 elif file_type == "parquet":
-                    rows = self.special_event_repo.delete_special_events_by_file(session, file_tracker_id)
-                    logger.info("Deleted special event records associated with quarantined file", file_tracker_id=file_tracker_id, deleted_rows=rows)
+                    rows = self.special_event_repo.delete_special_events_by_file(
+                        session, file_tracker_id
+                    )
+                    logger.info(
+                        "Deleted special event records associated with quarantined file",
+                        file_tracker_id=file_tracker_id,
+                        deleted_rows=rows,
+                    )
                 else:
-                    logger.warning("Unknown file type for quarantine, skipping deletion of records", file_tracker_id=file_tracker_id, file_type=file_type)
+                    logger.warning(
+                        "Unknown file type for quarantine, skipping deletion of records",
+                        file_tracker_id=file_tracker_id,
+                        file_type=file_type,
+                    )
 
                 ft = session.get(FileTracker, file_tracker_id)
                 if ft is not None:
                     self.file_tracker_repo.mark_failed(session, ft, reason)
                 else:
-                    logger.error("FileTracker record not found for quarantine", file_tracker_id=file_tracker_id)
+                    logger.error(
+                        "FileTracker record not found for quarantine",
+                        file_tracker_id=file_tracker_id,
+                    )
 
         except Exception as e:
-            logger.error("Failed to mark file as failed in quarantine", file_tracker_id=file_tracker_id, error=str(e))
+            logger.error(
+                "Failed to mark file as failed in quarantine",
+                file_tracker_id=file_tracker_id,
+                error=str(e),
+            )
 
     def _is_duplicate(self, checksum: bytes) -> bool:
         """
@@ -274,26 +375,26 @@ class IngestionPipeline:
         """
         if self.dry_run:
             return False  # Don't skip any files in dry run mode
-        
+
         try:
             with get_db_session(self.session_factory) as session:
                 row = session.execute(
                     select(FileTracker.id).where(
                         FileTracker.checksum_sha256 == checksum,
-                        FileTracker.status == FileStatus.DONE
+                        FileTracker.status == FileStatus.DONE,
                     )
                 ).first()
                 return row is not None
         except Exception as e:
             logger.error("Error checking for duplicate file in database", error=str(e))
             return False
-    
+
     def _stream_file(
-            self, 
-            file: BaseFile, 
-            parser: BaseParser, 
-            device_id: int, 
-            source_file_id: int | None
+        self,
+        file: BaseFile,
+        parser: BaseParser,
+        device_id: int,
+        source_file_id: int | None,
     ) -> tuple[int, int, bool]:
         """
         Parse a file in source order and persist records atomically in batches.
@@ -308,21 +409,25 @@ class IngestionPipeline:
             batch.append(record)
 
             if len(batch) >= settings.db_batch_size:
-                total_inserted += self._persist_batch(batch, device_id, source_file_id, deadline)
+                total_inserted += self._persist_batch(
+                    batch, device_id, source_file_id, deadline
+                )
                 batch.clear()
-        
+
         if batch:
-            total_inserted += self._persist_batch(batch, device_id, source_file_id, deadline)
-        
+            total_inserted += self._persist_batch(
+                batch, device_id, source_file_id, deadline
+            )
+
         return total_inserted, total_produced, total_inserted == total_produced
 
     def _persist_batch(
-            self,
-            batch: list[HistoryLogRecord | SpecialEventRecord],
-            device_id: int,
-            source_file_id: int | None,
-            deadline: float,
-            split_depth: int = 0
+        self,
+        batch: list[HistoryLogRecord | SpecialEventRecord],
+        device_id: int,
+        source_file_id: int | None,
+        deadline: float,
+        split_depth: int = 0,
     ) -> int:
         """
         Persist a batch of records to the database. If insertion fails, split the batch and retry.
@@ -335,53 +440,85 @@ class IngestionPipeline:
             return len(batch)
 
         if device_id is None:
-            raise BatchPersistenceError("Device ID is required for inserting records into the database.")
-        
+            raise BatchPersistenceError(
+                "Device ID is required for inserting records into the database."
+            )
+
         last_error: Exception | None = None
 
         for attempt in range(settings.db_retry_attempts):
             if monotonic() > deadline:
-                logger.error("Batch insertion deadline exceeded, aborting batch.", batch_size=len(batch), split_depth=split_depth)
+                logger.error(
+                    "Batch insertion deadline exceeded, aborting batch.",
+                    batch_size=len(batch),
+                    split_depth=split_depth,
+                )
                 break
 
             try:
                 with get_db_session(self.session_factory) as session:
-                    inserted = self._insert_batch_in_transaction(session, batch, device_id, source_file_id)
-                    logger.debug("Batch inserted successfully.", batch_size=len(batch), inserted=inserted, split_depth=split_depth)
+                    inserted = self._insert_batch_in_transaction(
+                        session, batch, device_id, source_file_id
+                    )
+                    logger.debug(
+                        "Batch inserted successfully.",
+                        batch_size=len(batch),
+                        inserted=inserted,
+                        split_depth=split_depth,
+                    )
                     return inserted
             except Exception as e:
                 last_error = e
                 delay = min(
                     settings.db_retry_max_delay,
-                    settings.db_retry_initial_delay * (2 ** (attempt))  # Exponential backoff
+                    settings.db_retry_initial_delay
+                    * (2 ** (attempt)),  # Exponential backoff
                 )
-                logger.warning("Batch insertion failed, will retry after delay.", attempt=attempt, batch_size=len(batch), delay=delay, error=str(e))
+                logger.warning(
+                    "Batch insertion failed, will retry after delay.",
+                    attempt=attempt,
+                    batch_size=len(batch),
+                    delay=delay,
+                    error=str(e),
+                )
                 if monotonic() + delay < deadline:
                     sleep(delay)
                 else:
-                    logger.error("Cannot retry batch insertion due to deadline constraints, aborting batch.", batch_size=len(batch), split_depth=split_depth)
+                    logger.error(
+                        "Cannot retry batch insertion due to deadline constraints, aborting batch.",
+                        batch_size=len(batch),
+                        split_depth=split_depth,
+                    )
                     break
-        
-        if len(batch) == 1 or split_depth >= settings.max_batch_split_depth or monotonic() > deadline:
+
+        if (
+            len(batch) == 1
+            or split_depth >= settings.max_batch_split_depth
+            or monotonic() > deadline
+        ):
             raise BatchPersistenceError(
                 f"Could not persist batch of size {len(batch)} after retries; last_error={last_error}"
             ) from last_error
-        
+
         midpoint = len(batch) // 2
         left_batch = batch[:midpoint]
         right_batch = batch[midpoint:]
 
-        left_inserted = self._persist_batch(left_batch, device_id, source_file_id, deadline, split_depth + 1)
-        right_inserted = self._persist_batch(right_batch, device_id, source_file_id, deadline, split_depth + 1)
+        left_inserted = self._persist_batch(
+            left_batch, device_id, source_file_id, deadline, split_depth + 1
+        )
+        right_inserted = self._persist_batch(
+            right_batch, device_id, source_file_id, deadline, split_depth + 1
+        )
 
         return left_inserted + right_inserted
 
     def _insert_batch_in_transaction(
-            self,
-            session,
-            batch: list[HistoryLogRecord | SpecialEventRecord],
-            device_id: int,
-            source_file_id: int | None
+        self,
+        session,
+        batch: list[HistoryLogRecord | SpecialEventRecord],
+        device_id: int,
+        source_file_id: int | None,
     ) -> int:
         """
         Insert a batch of records into the database within a transaction.
@@ -395,18 +532,30 @@ class IngestionPipeline:
             elif isinstance(record, SpecialEventRecord):
                 special_events.append(record)
             else:
-                logger.warning("Unknown record type encountered in batch, skipping.", record=record)
+                logger.warning(
+                    "Unknown record type encountered in batch, skipping.", record=record
+                )
 
         if history_logs:
-            inserted = self.history_log_repo.insert_history_logs(session, history_logs, device_id, source_file_id)
+            inserted = self.history_log_repo.insert_history_logs(
+                session, history_logs, device_id, source_file_id
+            )
             records_ingested.labels(table="history_log").inc(len(history_logs))
-            logger.debug("Inserted history log records in transaction.", inserted=len(history_logs))
+            logger.debug(
+                "Inserted history log records in transaction.",
+                inserted=len(history_logs),
+            )
             return inserted
-        
+
         if special_events:
-            inserted = self.special_event_repo.insert_special_events(session, special_events, device_id, source_file_id)
+            inserted = self.special_event_repo.insert_special_events(
+                session, special_events, device_id, source_file_id
+            )
             records_ingested.labels(table="special_event").inc(len(special_events))
-            logger.debug("Inserted special event records in transaction.", inserted=len(special_events))
+            logger.debug(
+                "Inserted special event records in transaction.",
+                inserted=len(special_events),
+            )
             return inserted
-        
+
         return 0  # No records to insert

@@ -16,6 +16,7 @@ Covers:
     - centisecond clamping edge cases via construct_time
     - all scalar fields passed through correctly
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -28,6 +29,7 @@ from ingestion.parsers.base import HistoryLogRecord, SpecialEventRecord
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _history_record(**overrides) -> HistoryLogRecord:
     defaults = {
@@ -42,44 +44,77 @@ def _history_record(**overrides) -> HistoryLogRecord:
 
 def _special_record(**overrides) -> SpecialEventRecord:
     defaults = {
-        "acc_x": 1.1, "acc_y": 2.2, "acc_z": 3.3,
-        "gyro_x": 4.4, "gyro_y": 5.5, "gyro_z": 6.6,
-        "hdop": 7.7, "lat": 8.8, "lon": 9.9, "speed": 10.1,
-        "gps_fix": 1, "hour": 12, "min": 34, "sec": 56, "cent": 50,
-        "alarms": 3, "algo_ignited": 0, "algo_enabled": 1,
+        "acc_x": 1.1,
+        "acc_y": 2.2,
+        "acc_z": 3.3,
+        "gyro_x": 4.4,
+        "gyro_y": 5.5,
+        "gyro_z": 6.6,
+        "hdop": 7.7,
+        "lat": 8.8,
+        "lon": 9.9,
+        "speed": 10.1,
+        "gps_fix": 1,
+        "hour": 12,
+        "min": 34,
+        "sec": 56,
+        "cent": 50,
+        "alarms": 3,
+        "algo_ignited": 0,
+        "algo_enabled": 1,
     }
-    return SpecialEventRecord(source_file="device.parquet", data={**defaults, **overrides})
+    return SpecialEventRecord(
+        source_file="device.parquet", data={**defaults, **overrides}
+    )
 
 
 # ── HistoryLogRepository._history_log_to_row ─────────────────────────────────
+
 
 class TestHistoryLogToRow:
     repo = HistoryLogRepository()
 
     def test_basic_row_structure(self) -> None:
-        row = self.repo._history_log_to_row(_history_record(), device_id=42, source_file_id=99)
+        row = self.repo._history_log_to_row(
+            _history_record(), device_id=42, source_file_id=99
+        )
         assert set(row.keys()) == {
-            "device_id", "firmware_version", "event_ts", "event_id", "value", "source_file_id"
+            "device_id",
+            "firmware_version",
+            "event_ts",
+            "event_id",
+            "value",
+            "source_file_id",
         }
 
     def test_device_id_propagated(self) -> None:
-        row = self.repo._history_log_to_row(_history_record(), device_id=7, source_file_id=None)
+        row = self.repo._history_log_to_row(
+            _history_record(), device_id=7, source_file_id=None
+        )
         assert row["device_id"] == 7
 
     def test_source_file_id_propagated(self) -> None:
-        row = self.repo._history_log_to_row(_history_record(), device_id=1, source_file_id=55)
+        row = self.repo._history_log_to_row(
+            _history_record(), device_id=1, source_file_id=55
+        )
         assert row["source_file_id"] == 55
 
     def test_source_file_id_none_allowed(self) -> None:
-        row = self.repo._history_log_to_row(_history_record(), device_id=1, source_file_id=None)
+        row = self.repo._history_log_to_row(
+            _history_record(), device_id=1, source_file_id=None
+        )
         assert row["source_file_id"] is None
 
     def test_timestamp_is_utc_aware(self) -> None:
-        row = self.repo._history_log_to_row(_history_record(), device_id=1, source_file_id=None)
+        row = self.repo._history_log_to_row(
+            _history_record(), device_id=1, source_file_id=None
+        )
         assert row["event_ts"].tzinfo == timezone.utc
 
     def test_timestamp_with_milliseconds(self) -> None:
-        row = self.repo._history_log_to_row(_history_record(), device_id=1, source_file_id=None)
+        row = self.repo._history_log_to_row(
+            _history_record(), device_id=1, source_file_id=None
+        )
         expected = datetime(2026, 6, 17, 12, 34, 56, 123_000, tzinfo=timezone.utc)
         assert row["event_ts"] == expected
 
@@ -110,25 +145,45 @@ class TestHistoryLogToRow:
 
 # ── SpecialEventRepository._special_event_to_row ─────────────────────────────
 
+
 class TestSpecialEventToRow:
     repo = SpecialEventRepository()
 
     def test_basic_row_structure(self) -> None:
-        row = self.repo._special_event_to_row(_special_record(), device_id=1, source_file_id=None)
+        row = self.repo._special_event_to_row(
+            _special_record(), device_id=1, source_file_id=None
+        )
         expected_keys = {
-            "device_id", "acc_x", "acc_y", "acc_z",
-            "gyro_x", "gyro_y", "gyro_z",
-            "hdop", "lat", "lon", "speed", "gps_fix",
-            "time", "alarms", "algo_ignited", "algo_enabled", "source_file_id",
+            "device_id",
+            "acc_x",
+            "acc_y",
+            "acc_z",
+            "gyro_x",
+            "gyro_y",
+            "gyro_z",
+            "hdop",
+            "lat",
+            "lon",
+            "speed",
+            "gps_fix",
+            "time",
+            "alarms",
+            "algo_ignited",
+            "algo_enabled",
+            "source_file_id",
         }
         assert set(row.keys()) == expected_keys
 
     def test_device_id_propagated(self) -> None:
-        row = self.repo._special_event_to_row(_special_record(), device_id=17, source_file_id=None)
+        row = self.repo._special_event_to_row(
+            _special_record(), device_id=17, source_file_id=None
+        )
         assert row["device_id"] == 17
 
     def test_source_file_id_propagated(self) -> None:
-        row = self.repo._special_event_to_row(_special_record(), device_id=1, source_file_id=21)
+        row = self.repo._special_event_to_row(
+            _special_record(), device_id=1, source_file_id=21
+        )
         assert row["source_file_id"] == 21
 
     # boolean coercion ────────────────────────────────────────────────────────
@@ -163,7 +218,9 @@ class TestSpecialEventToRow:
 
     def test_time_hour_minute_second_correct(self) -> None:
         row = self.repo._special_event_to_row(
-            _special_record(hour=23, min=59, sec=58, cent=10), device_id=1, source_file_id=None
+            _special_record(hour=23, min=59, sec=58, cent=10),
+            device_id=1,
+            source_file_id=None,
         )
         t = row["time"]
         assert t.hour == 23

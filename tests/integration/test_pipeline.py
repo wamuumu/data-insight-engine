@@ -23,11 +23,11 @@ Test coverage:
   - File mode: single file processed directly without crawling
   - PipelineStats aggregated correctly across a multi-file directory run
 """
+
 from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 import openpyxl
 import pyarrow as pa
@@ -36,12 +36,13 @@ import pytest
 
 import ingestion.pipeline as pipeline_module
 from db.models.file_tracker import FileStatus
-from ingestion.pipeline import IngestionPipeline, PipelineStats
+from ingestion.pipeline import IngestionPipeline
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fake collaborators
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class FakeTracker:
     def __init__(self, tracker_id: int, file_path: str, checksum: bytes):
@@ -59,6 +60,7 @@ class FakeDevice:
 
 class FakeSession:
     """Minimal session stub: supports session.get(Model, id)."""
+
     def __init__(self):
         self.tracker: FakeTracker | None = None
 
@@ -140,6 +142,7 @@ class FakeSpecialEventRepo:
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def fake_session():
     return FakeSession()
@@ -165,6 +168,7 @@ def make_pipeline(fakes, monkeypatch):
     The monkeypatched get_db_session yields fakes["session"]; all four
     repositories are replaced with the fake counterparts.
     """
+
     @contextmanager
     def _fake_db_session(session_factory):
         yield fakes["session"]
@@ -178,7 +182,9 @@ def make_pipeline(fakes, monkeypatch):
     monkeypatch.setattr(pipeline_module.settings, "file_retry_timeout", 30)
     monkeypatch.setattr(pipeline_module.settings, "max_batch_split_depth", 2)
 
-    def _factory(path: Path, *, dry_run: bool = False, file_mode: bool = True) -> IngestionPipeline:
+    def _factory(
+        path: Path, *, dry_run: bool = False, file_mode: bool = True
+    ) -> IngestionPipeline:
         p = IngestionPipeline(
             root=path,
             session_factory=lambda: None,
@@ -199,7 +205,10 @@ def make_pipeline(fakes, monkeypatch):
 # File builders
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _xlsx(tmp_path: Path, filename: str = "device_B12345678.xlsx", n_rows: int = 2) -> Path:
+
+def _xlsx(
+    tmp_path: Path, filename: str = "device_B12345678.xlsx", n_rows: int = 2
+) -> Path:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["Event ID", "Value", "Date", "Time"])
@@ -210,17 +219,34 @@ def _xlsx(tmp_path: Path, filename: str = "device_B12345678.xlsx", n_rows: int =
     return path
 
 
-def _parquet(tmp_path: Path, filename: str = "device_B12345678.parquet", n_rows: int = 2) -> Path:
+def _parquet(
+    tmp_path: Path, filename: str = "device_B12345678.parquet", n_rows: int = 2
+) -> Path:
     n = n_rows
-    table = pa.table({
-        "ACC_X": [1.0] * n, "ACC_Y": [2.0] * n, "ACC_Z": [3.0] * n,
-        "GYRO_X": [4.0] * n, "GYRO_Y": [5.0] * n, "GYRO_Z": [6.0] * n,
-        "HDOP": [7.0] * n, "lat": [45.0] * n, "long": [9.0] * n,
-        "speed_km_h": [30.0] * n, "Hour": [12] * n, "Min": [0] * n,
-        "Sec": [0] * n, "Cent": [0] * n, "Alarms": [0] * n,
-        "algoIgnited": [1] * n, "algoEnabled": [0] * n, "GPS_Fix": [True] * n,
-        "counter": [0] * n, "extDataPresent": [0] * n,
-    })
+    table = pa.table(
+        {
+            "ACC_X": [1.0] * n,
+            "ACC_Y": [2.0] * n,
+            "ACC_Z": [3.0] * n,
+            "GYRO_X": [4.0] * n,
+            "GYRO_Y": [5.0] * n,
+            "GYRO_Z": [6.0] * n,
+            "HDOP": [7.0] * n,
+            "lat": [45.0] * n,
+            "long": [9.0] * n,
+            "speed_km_h": [30.0] * n,
+            "Hour": [12] * n,
+            "Min": [0] * n,
+            "Sec": [0] * n,
+            "Cent": [0] * n,
+            "Alarms": [0] * n,
+            "algoIgnited": [1] * n,
+            "algoEnabled": [0] * n,
+            "GPS_Fix": [True] * n,
+            "counter": [0] * n,
+            "extDataPresent": [0] * n,
+        }
+    )
     path = tmp_path / filename
     pq.write_table(table, path)
     return path
@@ -229,6 +255,7 @@ def _parquet(tmp_path: Path, filename: str = "device_B12345678.parquet", n_rows:
 # ─────────────────────────────────────────────────────────────────────────────
 # Happy-path tests
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestPipelineHappyPath:
     @pytest.mark.parametrize("kind", ["xlsx", "parquet"])
@@ -243,17 +270,23 @@ class TestPipelineHappyPath:
         assert stats.records_inserted == 2
         assert fakes["session"].tracker.status == FileStatus.DONE
 
-    def test_xlsx_inserts_into_history_log_repo(self, tmp_path, fakes, make_pipeline) -> None:
+    def test_xlsx_inserts_into_history_log_repo(
+        self, tmp_path, fakes, make_pipeline
+    ) -> None:
         stats = make_pipeline(_xlsx(tmp_path)).run()
         assert len(fakes["history_log"].batches) > 0
         assert fakes["special_event"].batches == []
 
-    def test_parquet_inserts_into_special_event_repo(self, tmp_path, fakes, make_pipeline) -> None:
+    def test_parquet_inserts_into_special_event_repo(
+        self, tmp_path, fakes, make_pipeline
+    ) -> None:
         stats = make_pipeline(_parquet(tmp_path)).run()
         assert len(fakes["special_event"].batches) > 0
         assert fakes["history_log"].batches == []
 
-    def test_device_serial_number_registered(self, tmp_path, fakes, make_pipeline) -> None:
+    def test_device_serial_number_registered(
+        self, tmp_path, fakes, make_pipeline
+    ) -> None:
         make_pipeline(_xlsx(tmp_path)).run()
         assert fakes["device"].registered == ["B12345678"]
 
@@ -277,8 +310,11 @@ class TestPipelineHappyPath:
 # Deduplication
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestPipelineDeduplication:
-    def test_duplicate_file_is_skipped(self, tmp_path, fakes, make_pipeline, monkeypatch) -> None:
+    def test_duplicate_file_is_skipped(
+        self, tmp_path, fakes, make_pipeline, monkeypatch
+    ) -> None:
         path = _xlsx(tmp_path)
         pipeline = make_pipeline(path)
         monkeypatch.setattr(pipeline, "_is_duplicate", lambda checksum: True)
@@ -290,7 +326,9 @@ class TestPipelineDeduplication:
         assert stats.records_inserted == 0
         assert fakes["session"].tracker is None  # no DB writes
 
-    def test_non_duplicate_file_is_processed(self, tmp_path, fakes, make_pipeline) -> None:
+    def test_non_duplicate_file_is_processed(
+        self, tmp_path, fakes, make_pipeline
+    ) -> None:
         stats = make_pipeline(_xlsx(tmp_path)).run()
         assert stats.files_deduplicated == 0
         assert stats.files_parsed == 1
@@ -299,6 +337,7 @@ class TestPipelineDeduplication:
 # ─────────────────────────────────────────────────────────────────────────────
 # Error / failure paths
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestPipelineFailurePaths:
     def test_file_without_serial_number_is_counted_as_failed(
@@ -332,7 +371,11 @@ class TestPipelineFailurePaths:
         path = _xlsx(tmp_path)
         pipeline = make_pipeline(path)
 
-        monkeypatch.setattr(pipeline, "_stream_file", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail")))
+        monkeypatch.setattr(
+            pipeline,
+            "_stream_file",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail")),
+        )
 
         pipeline.run()
         assert len(fakes["history_log"].deleted) == 1
@@ -343,7 +386,11 @@ class TestPipelineFailurePaths:
         path = _parquet(tmp_path)
         pipeline = make_pipeline(path)
 
-        monkeypatch.setattr(pipeline, "_stream_file", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail")))
+        monkeypatch.setattr(
+            pipeline,
+            "_stream_file",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail")),
+        )
 
         pipeline.run()
         assert len(fakes["special_event"].deleted) == 1
@@ -361,6 +408,7 @@ class TestPipelineFailurePaths:
 # ─────────────────────────────────────────────────────────────────────────────
 # Dry-run mode
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestPipelineDryRun:
     def test_dry_run_counts_records_without_db_writes(
@@ -392,6 +440,7 @@ class TestPipelineDryRun:
 # Directory / file-mode
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestPipelineDiscovery:
     def test_directory_mode_processes_multiple_files(
         self, tmp_path, fakes, make_pipeline, monkeypatch
@@ -407,9 +456,7 @@ class TestPipelineDiscovery:
         assert stats.files_parsed == 2
         assert stats.records_inserted == 4
 
-    def test_empty_directory_produces_zero_stats(
-        self, tmp_path, make_pipeline
-    ) -> None:
+    def test_empty_directory_produces_zero_stats(self, tmp_path, make_pipeline) -> None:
         pipeline = make_pipeline(tmp_path, file_mode=False)
         stats = pipeline.run()
         assert stats.files_discovered == 0
@@ -426,6 +473,7 @@ class TestPipelineDiscovery:
 # ─────────────────────────────────────────────────────────────────────────────
 # Batch-splitting (persistence layer)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestPipelineBatchSplitting:
     def test_batch_split_on_db_error_still_inserts_all_records(

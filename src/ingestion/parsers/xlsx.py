@@ -26,13 +26,15 @@ class XLSXParser(BaseParser):
         Check if the file is an XLSX file based on its extension.
         """
         return file.suffix == ".xlsx"
-    
+
     def parse(self, file: BaseFile) -> Generator[HistoryLogRecord, None, None]:
         """
         Parse the XLSX file and yield records as dictionaries.
         """
-        logger.info("Parsing XLSX file", path=str(file.path), size_mb=round(file.size / 1e6, 2))
-        
+        logger.info(
+            "Parsing XLSX file", path=str(file.path), size_mb=round(file.size / 1e6, 2)
+        )
+
         try:
             workbook = openpyxl.load_workbook(file.path, read_only=True, data_only=True)
         except Exception as e:
@@ -50,15 +52,17 @@ class XLSXParser(BaseParser):
                 "Expected exactly one sheet in XLSX file, found %d.",
                 len(workbook.sheetnames),
                 path=str(file.path),
-                found_sheets=len(workbook.sheetnames)
+                found_sheets=len(workbook.sheetnames),
             )
-        
+
         try:
             yield from self._parse_workbook(file, workbook)
         finally:
             workbook.close()
-    
-    def _parse_workbook(self, file: BaseFile, workbook: Workbook) -> Generator[HistoryLogRecord, None, None]:
+
+    def _parse_workbook(
+        self, file: BaseFile, workbook: Workbook
+    ) -> Generator[HistoryLogRecord, None, None]:
         """
         Parse the workbook and yield HistoryLogRecord instances. This method assumes the workbook is already open.
         """
@@ -70,12 +74,19 @@ class XLSXParser(BaseParser):
 
             # Read header, assuming the first row contains column names
             try:
-                header = [str(h).strip() if h is not None else f"column_{i}" for i, h in enumerate(next(rows_iter))]
+                header = [
+                    str(h).strip() if h is not None else f"column_{i}"
+                    for i, h in enumerate(next(rows_iter))
+                ]
             except StopIteration:
-                logger.warning("Sheet %s in file %s is empty, skipping.", sheet_name, file.path)
+                logger.warning(
+                    "Sheet %s in file %s is empty, skipping.", sheet_name, file.path
+                )
                 continue
 
-            all_rows = [row for row in rows_iter if not all(cell is None for cell in row)] # Skip empty rows
+            all_rows = [
+                row for row in rows_iter if not all(cell is None for cell in row)
+            ]  # Skip empty rows
             total_rows = len(all_rows)
 
             # Build firmware index over the sheet's rows
@@ -105,8 +116,10 @@ class XLSXParser(BaseParser):
 
                 yield HistoryLogRecord(source_file=str(file.path), data=record_data)
                 abs_row_index += 1
-    
-    def _build_firmware_index(self, file: BaseFile, header: list[str], rows: list[tuple]) -> list[tuple[int, int, int]]:
+
+    def _build_firmware_index(
+        self, file: BaseFile, header: list[str], rows: list[tuple]
+    ) -> list[tuple[int, int, int]]:
         """
         Returns a list of (abs_row_index, event_id, firmware_value) for ON/OFF events only.
         """
@@ -118,23 +131,25 @@ class XLSXParser(BaseParser):
         if event_id_col is None or firmware_col is None:
             logger.warning(
                 "Sheet is missing 'Event ID' or 'Value' columns, skipping firmware index building.",
-                path=str(file.path)
+                path=str(file.path),
             )
             return switch_events
-        
+
         for abs_row_index, row in enumerate(rows):
             try:
                 event_id = int(row[event_id_col])
                 firmware_value = int(row[firmware_col])
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError):
                 continue
 
             if event_id in (SWITCH_ON_EVENT_ID, SWITCH_OFF_EVENT_ID):
                 switch_events.append((abs_row_index, event_id, firmware_value))
-        
+
         return switch_events
-    
-    def _build_firmware_segments(self, file: BaseFile, switch_events: list[tuple[int, int, int]], total_rows: int) -> list[tuple[int, int, int]]:
+
+    def _build_firmware_segments(
+        self, file: BaseFile, switch_events: list[tuple[int, int, int]], total_rows: int
+    ) -> list[tuple[int, int, int]]:
         """
         Returns a list of (start_row_index, end_row_index, firmware_value) segments based on the switch events.
         """
@@ -190,20 +205,24 @@ class XLSXParser(BaseParser):
             else:
                 logger.warning(
                     "Unexpected last event type %s while processing firmware segments.",
-                    last_type,                    
+                    last_type,
                     path=str(file.path),
                     row_index=row_index,
-                    event_id=event_id
+                    event_id=event_id,
                 )
-        
+
         # Close any trailing open segment
-        firmware_to_use = last_firmware if last_firmware is not None else UNDEFINED_FIRMWARE_VERSION
+        firmware_to_use = (
+            last_firmware if last_firmware is not None else UNDEFINED_FIRMWARE_VERSION
+        )
         if total_rows > 0 and pending_start <= total_rows - 1:
             close_segment(total_rows - 1, firmware_to_use)
-        
+
         return segments
 
-    def _make_firmware_lookup(self, segments: list[tuple[int, int, int]]) -> Callable[[int], int | None]:
+    def _make_firmware_lookup(
+        self, segments: list[tuple[int, int, int]]
+    ) -> Callable[[int], int | None]:
         """
         Builds a binary-search lookup over firmware segments. Returns UNDEFINED_FIRMWARE_VERSION for rows that don't fall into any segment.
         """

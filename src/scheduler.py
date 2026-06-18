@@ -12,12 +12,12 @@ logger = get_logger(__name__)
 
 
 def build_scheduler(
-        pipeline: IngestionPipeline, 
-        time_str: str,
-        day_of_week: str | None = None,
-        day: int | None = None,
-        month: int | None = None
-    ) -> BlockingScheduler:
+    pipeline: IngestionPipeline,
+    time_str: str,
+    day_of_week: str | None = None,
+    day: int | None = None,
+    month: int | None = None,
+) -> BlockingScheduler:
     """
     Build and return a configured BlockingScheduler that runs the given pipeline according to the provided cron expression.
 
@@ -26,7 +26,9 @@ def build_scheduler(
         time_str (str): A time string defining the schedule for the pipeline execution.
     """
 
-    cron_trigger = _schedule_at(time_str, day_of_week=day_of_week, day=day, month=month, timezone="Europe/Rome")
+    cron_trigger = _schedule_at(
+        time_str, day_of_week=day_of_week, day=day, month=month, timezone="Europe/Rome"
+    )
 
     scheduler = BlockingScheduler(timezone="Europe/Rome")
 
@@ -35,9 +37,9 @@ def build_scheduler(
         trigger=cron_trigger,
         id="ingest_job",
         name="Scheduled Ingestion Job",
-        max_instances=1,            # never allow concurrent runs
-        coalesce=True,              # if missed, fire only once
-        misfire_grace_time=300,     # 5 minutes
+        max_instances=1,  # never allow concurrent runs
+        coalesce=True,  # if missed, fire only once
+        misfire_grace_time=300,  # 5 minutes
     )
 
     scheduler.add_listener(_on_job_executed, EVENT_JOB_EXECUTED)
@@ -46,14 +48,15 @@ def build_scheduler(
     logger.info("Scheduler configured", cron_expression=str(cron_trigger))
     return scheduler
 
+
 def _schedule_at(
-        time_str: str, 
-        *,
-        day_of_week: str | None = None,
-        day: int | None = None,
-        month: int | None = None,
-        timezone: str = "Europe/Rome"
-    ) -> CronTrigger:
+    time_str: str,
+    *,
+    day_of_week: str | None = None,
+    day: int | None = None,
+    month: int | None = None,
+    timezone: str = "Europe/Rome",
+) -> CronTrigger:
     """
     Build a CronTrigger based on the provided time string and optional parameters.
 
@@ -72,12 +75,15 @@ def _schedule_at(
         hour=t.hour,
         minute=t.minute,
         second=t.second,
-        timezone=ZoneInfo(timezone)
+        timezone=ZoneInfo(timezone),
     )
 
 
 def _on_job_executed(event):
     logger.info("Scheduled job completed successfully", job_id=event.job_id)
 
+
 def _on_job_error(event):
-    logger.error("Scheduled job failed", job_id=event.job_id, error=str(event.exception))
+    logger.error(
+        "Scheduled job failed", job_id=event.job_id, error=str(event.exception)
+    )

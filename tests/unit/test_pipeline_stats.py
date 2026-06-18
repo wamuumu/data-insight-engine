@@ -8,9 +8,8 @@ Covers:
   - to_dict: key naming with/without suffix, all fields present
   - to_dict: empty suffix produces bare field names
 """
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from ingestion.pipeline import PipelineStats
 
@@ -30,14 +29,22 @@ class TestPipelineStatsDefaults:
 class TestPipelineStatsMerge:
     def test_merge_adds_all_fields(self) -> None:
         a = PipelineStats(
-            files_discovered=2, files_parsed=1, files_skipped=0,
-            files_deduplicated=1, files_failed=0,
-            records_produced=100, records_inserted=98,
+            files_discovered=2,
+            files_parsed=1,
+            files_skipped=0,
+            files_deduplicated=1,
+            files_failed=0,
+            records_produced=100,
+            records_inserted=98,
         )
         b = PipelineStats(
-            files_discovered=3, files_parsed=2, files_skipped=1,
-            files_deduplicated=0, files_failed=1,
-            records_produced=200, records_inserted=195,
+            files_discovered=3,
+            files_parsed=2,
+            files_skipped=1,
+            files_deduplicated=0,
+            files_failed=1,
+            records_produced=200,
+            records_inserted=195,
         )
         a.merge(b)
         assert a.files_discovered == 5
@@ -65,9 +72,13 @@ class TestPipelineStatsMerge:
 
 class TestPipelineStatsToDict:
     _EXPECTED_BARE_KEYS = {
-        "_files_discovered", "_files_parsed", "_files_skipped",
-        "_files_deduplicated", "_files_failed",
-        "_records_produced", "_records_inserted",
+        "_files_discovered",
+        "_files_parsed",
+        "_files_skipped",
+        "_files_deduplicated",
+        "_files_failed",
+        "_records_produced",
+        "_records_inserted",
     }
 
     def test_to_dict_with_suffix_produces_correct_keys(self) -> None:

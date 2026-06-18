@@ -11,6 +11,7 @@ Covers:
   - parse: corrupted / missing file raises
   - parse: source_file attribute is set on each record
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,6 +26,7 @@ from ingestion.parsers.parquet import ParquetParser
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _write_parquet(path: Path, overrides: dict | None = None) -> Path:
     defaults: dict[str, list] = {
@@ -56,6 +58,7 @@ def _write_parquet(path: Path, overrides: dict | None = None) -> Path:
 
 # ── can_handle ────────────────────────────────────────────────────────────────
 
+
 class TestParquetParserCanHandle:
     def test_true_for_parquet_extension(self, tmp_path: Path) -> None:
         p = tmp_path / "x.parquet"
@@ -75,6 +78,7 @@ class TestParquetParserCanHandle:
 
 
 # ── parse: field mapping ──────────────────────────────────────────────────────
+
 
 class TestParquetParserFieldMapping:
     @pytest.fixture
@@ -124,6 +128,7 @@ class TestParquetParserFieldMapping:
 
 # ── parse: dropped columns ────────────────────────────────────────────────────
 
+
 class TestParquetParserDroppedColumns:
     @pytest.mark.parametrize("col", ["counter", "extDataPresent"])
     def test_dropped_column_absent_from_record(self, tmp_path: Path, col: str) -> None:
@@ -143,19 +148,23 @@ class TestParquetParserDroppedColumns:
 
 # ── parse: batching behaviour ─────────────────────────────────────────────────
 
+
 class TestParquetParserBatching:
     def test_batch_size_one_yields_all_records(self, tmp_path: Path) -> None:
         path = _write_parquet(tmp_path / "device_B12345678.parquet")
         records = list(ParquetParser(batch_size=1).parse(BaseFile(path)))
         assert len(records) == 2
 
-    def test_batch_size_larger_than_file_yields_all_records(self, tmp_path: Path) -> None:
+    def test_batch_size_larger_than_file_yields_all_records(
+        self, tmp_path: Path
+    ) -> None:
         path = _write_parquet(tmp_path / "device_B12345678.parquet")
         records = list(ParquetParser(batch_size=10_000).parse(BaseFile(path)))
         assert len(records) == 2
 
 
 # ── parse: error handling ─────────────────────────────────────────────────────
+
 
 class TestParquetParserErrors:
     def test_missing_file_raises(self, tmp_path: Path) -> None:

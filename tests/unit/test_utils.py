@@ -8,12 +8,11 @@ Covers:
   - combine_date_time: with and without milliseconds, UTC awareness
   - construct_time: normal values, centisecond clamping (>99, <0)
 """
+
 from __future__ import annotations
 
 from datetime import datetime, time, timezone
 from pathlib import Path
-
-import pytest
 
 from common.utils import (
     combine_date_time,
@@ -24,6 +23,7 @@ from common.utils import (
 
 
 # ── extract_serial_number ────────────────────────────────────────────────────
+
 
 class TestExtractSerialNumber:
     def test_valid_pattern_returns_match(self, tmp_path: Path) -> None:
@@ -79,6 +79,7 @@ class TestExtractSerialNumber:
 
 # ── compute_sha256 ────────────────────────────────────────────────────────────
 
+
 class TestComputeSha256:
     # SHA-256("abc") = ba7816bf...
     _ABC_DIGEST = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
@@ -86,7 +87,9 @@ class TestComputeSha256:
     def test_known_digest_for_abc(self, tmp_path: Path) -> None:
         path = tmp_path / "payload.bin"
         path.write_bytes(b"abc")
-        assert compute_sha256(path).hex() == self._ABC_DIGEST
+        digest = compute_sha256(path)
+        assert digest is not None
+        assert digest.hex() == self._ABC_DIGEST
 
     def test_empty_file_has_stable_digest(self, tmp_path: Path) -> None:
         path = tmp_path / "empty.bin"
@@ -116,6 +119,7 @@ class TestComputeSha256:
 
 # ── combine_date_time ─────────────────────────────────────────────────────────
 
+
 class TestCombineDateTime:
     def test_with_milliseconds_parses_correctly(self) -> None:
         result = combine_date_time("17/06/2026", "12:34:56.123")
@@ -144,6 +148,7 @@ class TestCombineDateTime:
 
 
 # ── construct_time ────────────────────────────────────────────────────────────
+
 
 class TestConstructTime:
     def test_normal_values(self) -> None:

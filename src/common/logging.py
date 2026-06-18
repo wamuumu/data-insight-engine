@@ -5,9 +5,12 @@ from pathlib import Path
 
 import structlog
 
-_RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")  # Timestamp for the current run, used in log file naming
+_RUN_TIMESTAMP = datetime.now().strftime(
+    "%Y%m%d_%H%M%S"
+)  # Timestamp for the current run, used in log file naming
 _LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
 _LOG_FILE = _LOG_DIR / f"app_{_RUN_TIMESTAMP}.log"
+
 
 def setup_logging(log_level: str, log_format: str):
     """
@@ -15,7 +18,11 @@ def setup_logging(log_level: str, log_format: str):
     """
     log_level_int = getattr(logging, log_level.upper(), logging.INFO)
 
-    renderer = structlog.processors.JSONRenderer() if log_format.strip().lower() == "json" else structlog.dev.ConsoleRenderer(colors=False)
+    renderer = (
+        structlog.processors.JSONRenderer()
+        if log_format.strip().lower() == "json"
+        else structlog.dev.ConsoleRenderer(colors=False)
+    )
 
     shared_processors = [
         structlog.contextvars.merge_contextvars,
@@ -27,7 +34,8 @@ def setup_logging(log_level: str, log_format: str):
     ]
 
     structlog.configure(
-        processors=shared_processors + [
+        processors=shared_processors
+        + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
@@ -40,7 +48,7 @@ def setup_logging(log_level: str, log_format: str):
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             renderer,
-        ]
+        ],
     )
 
     stdout_handler = logging.StreamHandler(sys.stdout)
@@ -54,7 +62,7 @@ def setup_logging(log_level: str, log_format: str):
     file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8", delay=True)
     file_handler.setFormatter(formatter)
     handlers.append(file_handler)
-    
+
     root_logger = logging.getLogger()
     root_logger.handlers = []
     for handler in handlers:
@@ -65,6 +73,7 @@ def setup_logging(log_level: str, log_format: str):
         logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
         logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
         logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """Return a named structlog logger."""

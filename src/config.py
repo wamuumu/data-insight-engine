@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
 class Settings(BaseSettings):
     """
     Application settings loaded from environment variables. Validates required fields and formats.
@@ -12,37 +13,70 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
-        env_file_encoding="utf-8",     
-        extra="ignore",             # Ignore unknown fields in .env
+        env_file_encoding="utf-8",
+        extra="ignore",  # Ignore unknown fields in .env
     )
 
     # ── Parsing ────────────────────────────────────────────────
-    parquet_batch_size: int = Field(default=100, description="Number of rows to read at a time when parsing Parquet files")
+    parquet_batch_size: int = Field(
+        default=100,
+        description="Number of rows to read at a time when parsing Parquet files",
+    )
 
     # ── Database ───────────────────────────────────────────────
-    db_url: str = Field(..., description="SQLAlchemy database URL for connecting to the PostgreSQL database")
+    db_url: str = Field(
+        ...,
+        description="SQLAlchemy database URL for connecting to the PostgreSQL database",
+    )
     db_user: str = Field(..., description="Database username for authentication")
     db_password: str = Field(..., description="Database password for authentication")
-    db_name: str = Field(..., description="Name of the PostgreSQL database to connect to")
-    db_batch_size: int = Field(default=100, description="Number of records to insert into the database in a single batch")
+    db_name: str = Field(
+        ..., description="Name of the PostgreSQL database to connect to"
+    )
+    db_batch_size: int = Field(
+        default=100,
+        description="Number of records to insert into the database in a single batch",
+    )
 
     # ── Ingestion ──────────────────────────────────────────────
-    workers: int = Field(default=4, description="Number of parallel workers for file ingestion")
-    db_retry_attempts: int = Field(default=4, description="Number of retry attempts for database operations on failure")
-    db_retry_initial_delay: float = Field(default=0.5, description="Initial delay in seconds before retrying a failed database operation")
-    db_retry_max_delay: float = Field(default=8.0, description="Maximum delay in seconds between retries for database operations")
-    file_retry_timeout: float = Field(default=300, description="Maximum time in seconds to retry processing a file before giving up")
-    max_batch_split_depth: int = Field(default=10, description="Maximum depth to split large batches for insertion into the database")
+    workers: int = Field(
+        default=4, description="Number of parallel workers for file ingestion"
+    )
+    db_retry_attempts: int = Field(
+        default=4,
+        description="Number of retry attempts for database operations on failure",
+    )
+    db_retry_initial_delay: float = Field(
+        default=0.5,
+        description="Initial delay in seconds before retrying a failed database operation",
+    )
+    db_retry_max_delay: float = Field(
+        default=8.0,
+        description="Maximum delay in seconds between retries for database operations",
+    )
+    file_retry_timeout: float = Field(
+        default=300,
+        description="Maximum time in seconds to retry processing a file before giving up",
+    )
+    max_batch_split_depth: int = Field(
+        default=10,
+        description="Maximum depth to split large batches for insertion into the database",
+    )
 
     # ── Scheduler ──────────────────────────────────────────────
-    data_root: str = Field(default="data", description="Root directory to crawl for data files")
+    data_root: str = Field(
+        default="data", description="Root directory to crawl for data files"
+    )
 
     # ── Metrics ───────────────────────────────────────────────
     metrics_port: int = Field(..., description="Port to expose Prometheus metrics on")
 
     # ── Logging ────────────────────────────────────────────────
     log_level: str = Field(default="INFO", description="Logging verbosity level")
-    log_format: str = Field(default="console", description="Logging format: 'console' for human-readable or 'json' for structured JSON logs")
+    log_format: str = Field(
+        default="console",
+        description="Logging format: 'console' for human-readable or 'json' for structured JSON logs",
+    )
 
     # ── Validators ─────────────────────────────────────────────
     @field_validator("log_level")
@@ -50,8 +84,11 @@ class Settings(BaseSettings):
     def validate_log_level(cls, value: str) -> str:
         valid_levels = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
         if value.upper() not in valid_levels:
-            raise ValueError(f"Invalid log level: {value}. Must be one of {valid_levels}")
+            raise ValueError(
+                f"Invalid log level: {value}. Must be one of {valid_levels}"
+            )
         return value.upper()
+
 
 def load_settings() -> Settings:
     """

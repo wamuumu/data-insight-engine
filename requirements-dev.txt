@@ -1,4 +1,11 @@
+# Unit + integration testing
 pytest
+pytest-sugar
+pytest-clarity
 testcontainers
+
+# Linting + formatting
 ruff
+
+# Type checking
 mypy

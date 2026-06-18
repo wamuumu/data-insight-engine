@@ -11,6 +11,7 @@ Covers:
   - Each combination of optional parameters creates a valid CronTrigger
   - Invalid time strings raise
 """
+
 from __future__ import annotations
 
 import pytest

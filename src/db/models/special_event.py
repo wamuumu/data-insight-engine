@@ -5,18 +5,19 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
 
-_REAL = Float(precision=24) # Use for 32-bit float values
+_REAL = Float(precision=24)  # Use for 32-bit float values
+
 
 class SpecialEvent(BaseModel):
     __tablename__ = "special_event"
-    __table_args__ = (
-        Index("idx_special_event_device_id", "device_id"),
-    )
+    __table_args__ = (Index("idx_special_event_device_id", "device_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     # ── Device identity ─────────────────────────────────────────
-    device_id: Mapped[int] = mapped_column(Integer, ForeignKey("device.id"), nullable=False)
+    device_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("device.id"), nullable=False
+    )
 
     # ── Accelerometer data ──────────────────────────────────────
     acc_x: Mapped[float] = mapped_column(_REAL, nullable=False)
@@ -44,4 +45,6 @@ class SpecialEvent(BaseModel):
     algo_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     # ── Lineage ─────────────────────────────────────────────────
-    source_file_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("file_tracker.id"), nullable=True)
+    source_file_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("file_tracker.id"), nullable=True
+    )

@@ -27,8 +27,9 @@ _HEADER_MAPPING = {
     "Alarms": "alarms",
     "algoIgnited": "algo_ignited",
     "algoEnabled": "algo_enabled",
-    "GPS_Fix": "gps_fix"
+    "GPS_Fix": "gps_fix",
 }
+
 
 class ParquetParser(BaseParser):
     """
@@ -43,17 +44,23 @@ class ParquetParser(BaseParser):
         Check if the file is a Parquet file based on its extension.
         """
         return file.suffix == ".parquet"
-    
+
     def parse(self, file: BaseFile) -> Generator[SpecialEventRecord, None, None]:
         """
         Parse the Parquet file and yield records as dictionaries.
         """
-        logger.info("Parsing Parquet file", path=str(file.path), size_mb=round(file.size / 1e6, 2))
-        
+        logger.info(
+            "Parsing Parquet file",
+            path=str(file.path),
+            size_mb=round(file.size / 1e6, 2),
+        )
+
         try:
             parquet_file = pq.ParquetFile(file.path)
         except Exception as e:
-            logger.error("Failed to read Parquet file", path=str(file.path), error=str(e))
+            logger.error(
+                "Failed to read Parquet file", path=str(file.path), error=str(e)
+            )
             raise
 
         logger.debug(
@@ -70,7 +77,7 @@ class ParquetParser(BaseParser):
             # Drop unnecessary columns
             for col in PARQUET_DROP_COLUMNS:
                 df.pop(col, None)
-            
+
             num_rows = len(next(iter(df.values()))) if df else 0
 
             for i in range(num_rows):
@@ -84,5 +91,3 @@ class ParquetParser(BaseParser):
                         record_data[mapped_key] = value
 
                 yield SpecialEventRecord(source_file=file.path, data=record_data)
-            
-

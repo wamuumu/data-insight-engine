@@ -12,4 +12,3 @@ class Device(BaseModel):
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
     serial_number: Mapped[str] = mapped_column(String(9), nullable=False)
-    

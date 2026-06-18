@@ -30,6 +30,7 @@ def build_engine(db_url: str, verbose: bool = False):
         logger.error("Failed to create database engine", db_url=db_url, error=str(e))
         raise
 
+
 def init_db(db_url: str, log_level: str = "INFO") -> sessionmaker:
     """
     Initialize the database connection and returns a session factory.
@@ -47,6 +48,7 @@ def init_db(db_url: str, log_level: str = "INFO") -> sessionmaker:
     logger.info("Database connectivity OK")
 
     return sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
 
 @contextmanager
 def get_db_session(session_factory: sessionmaker) -> Generator[Session, None, None]:

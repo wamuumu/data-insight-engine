@@ -6,9 +6,8 @@ Covers the derived properties that live on the model (no database required):
   - FileTracker.file_type  — extracts the extension without the leading dot, lower-cased
   - FileStatus enum values
 """
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from db.models.file_tracker import FileStatus, FileTracker
 

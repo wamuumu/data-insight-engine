@@ -8,14 +8,14 @@ from db.models.base import BaseModel
 
 class HistoryLog(BaseModel):
     __tablename__ = "history_log"
-    __table_args__ = (
-        Index("idx_history_log_device_ts", "device_id", "event_ts"),
-    )
+    __table_args__ = (Index("idx_history_log_device_ts", "device_id", "event_ts"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     # ── Device identity ─────────────────────────────────────────
-    device_id: Mapped[int] = mapped_column(Integer, ForeignKey("device.id"), nullable=False)
+    device_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("device.id"), nullable=False
+    )
 
     # ── Firmware and event details ──────────────────────────────
     firmware_version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -24,5 +24,6 @@ class HistoryLog(BaseModel):
     value: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # ── Lineage ─────────────────────────────────────────────────
-    source_file_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("file_tracker.id"), nullable=True)
-    
+    source_file_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("file_tracker.id"), nullable=True
+    )

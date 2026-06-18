@@ -10,6 +10,7 @@ Covers:
   - Yielding BaseFile objects with correct metadata
   - Empty directory produces no results
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -17,11 +17,16 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         """
         Check if a file with the given checksum has already been processed.
         """
-        stmt = select(FileTracker.id).where(FileTracker.checksum_sha256 == checksum, FileTracker.status == FileStatus.DONE)
+        stmt = select(FileTracker.id).where(
+            FileTracker.checksum_sha256 == checksum,
+            FileTracker.status == FileStatus.DONE,
+        )
         result = session.execute(stmt).first()
         return result is not None
-    
-    def get_file_tracker_by_checksum(self, session: Session, checksum: bytes) -> FileTracker | None:
+
+    def get_file_tracker_by_checksum(
+        self, session: Session, checksum: bytes
+    ) -> FileTracker | None:
         """
         Retrieve a FileTracker record by its checksum.
         """
@@ -30,10 +35,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         return result
 
     def create_file_tracker(
-        self,
-        session: Session,
-        file_path: str,
-        checksum_sha256: bytes
+        self, session: Session, file_path: str, checksum_sha256: bytes
     ) -> FileTracker:
         """
         Insert a new FileTracker record into the database with status 'pending' and return the created record.
@@ -43,7 +45,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
             .values(
                 file_path=file_path,
                 checksum_sha256=checksum_sha256,
-                status=FileStatus.PENDING
+                status=FileStatus.PENDING,
             )
             .on_conflict_do_nothing(constraint="uq_file_tracker_checksum")
             .returning(FileTracker)
@@ -69,7 +71,11 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         Update the given FileTracker record to mark it as 'done', set the finished_at timestamp, and update row counts.
         """
         tracker.status = FileStatus.DONE
-        logger.info("File processing completed", file_path=tracker.file_path, rows_inserted=rows_inserted)
+        logger.info(
+            "File processing completed",
+            file_path=tracker.file_path,
+            rows_inserted=rows_inserted,
+        )
         session.flush()
 
     def mark_failed(self, session: Session, tracker: FileTracker, error_message: str):
@@ -77,5 +83,9 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         Update the given FileTracker record to mark it as 'failed', set the finished_at timestamp, and record the error message.
         """
         tracker.status = FileStatus.FAILED
-        logger.error("File processing failed", file_path=tracker.file_path, error_message=error_message)
+        logger.error(
+            "File processing failed",
+            file_path=tracker.file_path,
+            error_message=error_message,
+        )
         session.flush()
