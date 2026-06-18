@@ -1,5 +1,5 @@
 {
-  "title": "Data Insight Engine — Ingestion",
+  "title": "D|Air ETL & Ingestion Monitoring",
   "uid": "die-ingestion",
   "schemaVersion": 38,
   "version": 1,
@@ -8,24 +8,26 @@
   "panels": [
     {
       "id": 1,
-      "title": "Records Ingested / sec",
+      "title": "Records Ingested (last hour)",
+      "description": "Number of records ingested in the last hour, grouped by table.",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum(rate(die_records_ingested_total[5m])) by (table)",
+          "expr": "sum(increase(records_ingested_total[1h])) by (table)",
           "legendFormat": "{{ table }}"
         }
       ]
     },
     {
       "id": 2,
-      "title": "Files Processed / hour",
+      "title": "Files Processed (last hour)",
+      "description": "Number of files processed in the last hour, grouped by status and file type.",
       "type": "timeseries",
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum(rate(die_files_processed_total[1h])) by (status, file_type)",
+          "expr": "sum(increase(files_processed_total[1h])) by (status, file_type)",
           "legendFormat": "{{ file_type }} — {{ status }}"
         }
       ]
@@ -33,43 +35,57 @@
     {
       "id": 3,
       "title": "File Processing Duration p95 (seconds)",
+      "description": "95th percentile of file processing duration in seconds, grouped by file type.",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "options": { "fieldConfig": { "defaults": { "unit": "s" } } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(die_file_processing_duration_seconds_bucket[10m])) by (le, file_type))",
+          "expr": "histogram_quantile(0.95, sum(rate(file_processing_duration_seconds_bucket[10m])) by (le, file_type))",
           "legendFormat": "p95 — {{ file_type }}"
         }
       ]
     },
     {
       "id": 4,
-      "title": "Time Since Last Pipeline Run",
+      "title": "Last Pipeline Execution",
+      "description": "Seconds elapsed since the most recent pipeline execution.",
       "type": "stat",
       "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "unit": "s" },
       "targets": [
         {
-          "expr": "time() - die_pipeline_last_run_timestamp_seconds",
+          "expr": "time() - pipeline_last_run_timestamp_seconds",
           "legendFormat": "seconds ago"
         }
       ]
     },
     {
       "id": 5,
-      "title": "Pipeline Currently Active",
+      "title": "Pipeline Status",
+      "description": "Indicates whether an ingestion pipeline execution is currently running.",
       "type": "stat",
       "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
       "targets": [
         {
-          "expr": "die_pipeline_active",
+          "expr": "pipeline_active",
           "legendFormat": ""
+        }
+      ],
+      "valueMappings": [
+        {
+          "type": "value",
+          "options": {
+            "0": { "text": "Idle" },
+            "1": { "text": "Running" }
+          }
         }
       ]
     },
     {
       "id": 6,
       "title": "PostgreSQL Database Size",
+      "description": "Size of the PostgreSQL database in bytes, grouped by database name.",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
       "targets": [
@@ -82,24 +98,26 @@
     },
     {
       "id": 7,
-      "title": "Total Files Processed (all time)",
+      "title": "Successful Processed Files",
+      "description": "Total number of successfully processed files since the pipeline started.",
       "type": "stat",
       "gridPos": { "x": 12, "y": 16, "w": 6, "h": 8 },
       "targets": [
         {
-          "expr": "sum(die_files_processed_total{status='done'})",
+          "expr": "sum(files_processed_total{status='success'})",
           "legendFormat": ""
         }
       ]
     },
     {
       "id": 8,
-      "title": "Total Files Failed (all time)",
+      "title": "Failed Files",
+      "description": "Total number of failed files since the pipeline started.",
       "type": "stat",
       "gridPos": { "x": 18, "y": 16, "w": 6, "h": 8 },
       "targets": [
         {
-          "expr": "sum(die_files_processed_total{status='failed'})",
+          "expr": "sum(files_processed_total{status='failure'})",
           "legendFormat": ""
         }
       ],

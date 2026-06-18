@@ -536,26 +536,27 @@ class IngestionPipeline:
                     "Unknown record type encountered in batch, skipping.", record=record
                 )
 
+        inserted_history_logs = 0
+        inserted_special_events = 0
+
         if history_logs:
-            inserted = self.history_log_repo.insert_history_logs(
+            inserted_history_logs = self.history_log_repo.insert_history_logs(
                 session, history_logs, device_id, source_file_id
             )
-            records_ingested.labels(table="history_log").inc(len(history_logs))
+            records_ingested.labels(table="history_log").inc(inserted_history_logs)
             logger.debug(
                 "Inserted history log records in transaction.",
-                inserted=len(history_logs),
+                inserted=inserted_history_logs,
             )
-            return inserted
 
         if special_events:
-            inserted = self.special_event_repo.insert_special_events(
+            inserted_special_events = self.special_event_repo.insert_special_events(
                 session, special_events, device_id, source_file_id
             )
-            records_ingested.labels(table="special_event").inc(len(special_events))
+            records_ingested.labels(table="special_event").inc(inserted_special_events)
             logger.debug(
                 "Inserted special event records in transaction.",
-                inserted=len(special_events),
+                inserted=inserted_special_events,
             )
-            return inserted
 
-        return 0  # No records to insert
+        return inserted_history_logs + inserted_special_events  # Return total inserted records

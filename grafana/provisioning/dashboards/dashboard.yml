@@ -3,7 +3,7 @@ apiVersion: 1
 providers:
   - name: "data-insight-engine"
     orgId: 1
-    folder: "ETL"
+    folder: "Dainese"
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30
