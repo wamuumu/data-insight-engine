@@ -12,6 +12,7 @@ from common.constants import (
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, HistoryLogRecord
+from ingestion.processing.datetime_cleaner import clean_timestamps
 
 logger = get_logger(__name__)
 
@@ -102,6 +103,7 @@ class XLSXParser(BaseParser):
             date_col = header_mapping.get("Date")
             time_col = header_mapping.get("Time")
 
+            raw_records: list[dict] = []
             for _, row in enumerate(all_rows):
                 record_data: dict = {}
 
@@ -114,8 +116,22 @@ class XLSXParser(BaseParser):
                 # ── Derived fields ────────────────────────────────────────
                 record_data["firmware_version"] = firmware_lookup(abs_row_index)
 
-                yield HistoryLogRecord(source_file=str(file.path), data=record_data)
+                raw_records.append(record_data)
                 abs_row_index += 1
+            
+            cleaned_records = clean_timestamps(raw_records)
+            logger.info(
+                "RTC timestamps cleaning completed",
+                raw_records_count=len(raw_records),
+                cleaned_records_count=len(cleaned_records),
+                diff=len(cleaned_records) - len(raw_records)
+            )
+
+            for i, record in enumerate(cleaned_records):
+                logger.debug(f"{i}", **record)
+
+            for record_data in cleaned_records:
+                yield HistoryLogRecord(source_file=str(file.path), data=record_data)
 
     def _build_firmware_index(
         self, file: BaseFile, header: list[str], rows: list[tuple]
