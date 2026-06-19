@@ -147,6 +147,11 @@ def clean_timestamps(rows: list[dict]) -> list[dict]:
     working: list[dict] = copy.deepcopy(rows)
     n = len(working)
 
+    # TODO: there can be RTC SET also for non invalid rows
+    # If previous row is invalid, correct date and then time
+    # If previous row has time < current row time, then add delta otherwise remove delta
+    # For non-invalid rows, manage deltas until previous SWITCH_ON_EVENT_ID or for same dateadd
+
     windows = _detect_windows(working)
     if not windows:
         logger.debug("No windows detected, returning original rows.")
