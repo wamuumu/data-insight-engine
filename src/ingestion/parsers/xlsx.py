@@ -127,8 +127,8 @@ class XLSXParser(BaseParser):
                 diff=len(cleaned_records) - len(raw_records)
             )
 
-            for i, record in enumerate(cleaned_records):
-                logger.debug(f"{i}", **record)
+            # for i, record in enumerate(cleaned_records):
+            #     logger.debug(f"{i}", **record)
 
             for record_data in cleaned_records:
                 yield HistoryLogRecord(source_file=str(file.path), data=record_data)
