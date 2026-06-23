@@ -393,8 +393,5 @@ def clean_timestamps(rows: list[dict]) -> list[dict]:
             _shift_window(working, win)
             i += 1
     
-    for row in working:
-        logger.info("Final row after timestamp correction.", event_id=row.get("event_id"), event_date=row.get("event_date"), event_time=row.get("event_time"))
-    
     return working
 
