@@ -289,10 +289,10 @@ def _insert_rtc_guessed(rows: list[dict], index: int, guessed_dt: datetime, gues
     logger.info("Inserted RTC GUESSED event.", index=index, guessed_date=date_str, guessed_time=time_str, guess_depth=guess_depth)
     return 1
 
-def _guess_epoch_windows(rows: list[dict], epoch_windows: list[Window]):
+def _guess_epoch_windows(rows: list[dict], epoch_windows: list[Window]) -> int:
 
     if len(epoch_windows) < 2:
-        return
+        return 0
     
     offset = 0
 
@@ -336,6 +336,8 @@ def _guess_epoch_windows(rows: list[dict], epoch_windows: list[Window]):
         inserted = _insert_rtc_guessed(rows, adj_current_end + 1, guessed_anchor_dt, guess_depth)
         offset += inserted
 
+    return offset
+
 def clean_timestamps(rows: list[dict]) -> list[dict]:
     """
     Return a new list of rows with corrected timestamps.
@@ -353,6 +355,7 @@ def clean_timestamps(rows: list[dict]) -> list[dict]:
         logger.debug("No windows detected, returning original rows.")
         return working    
     
+    row_offset = 0
     i = 0
     while i < len(windows):
         win = windows[i]
@@ -375,7 +378,16 @@ def clean_timestamps(rows: list[dict]) -> list[dict]:
                     logger.warning("Detected single epoch window without RTC anchor, skipping correction.", window=win)
                 else:
                     logger.info("Detected single epoch window, normal correction will be applied.", window=win)
-                    _shift_window(working, win)                    
+                    adjusted = Window(
+                        start_idx=win.start_idx + row_offset,
+                        end_idx=win.end_idx + row_offset,
+                        start_dt=win.start_dt,
+                        end_dt=win.end_dt,
+                        rtc_anchor_idx=win.rtc_anchor_idx + row_offset,
+                        rtc_anchor_dt=win.rtc_anchor_dt,
+                        is_guessed=win.is_guessed
+                    )
+                    _shift_window(working, adjusted)                    
             else:
                 anchor_win_idx = next(
                     (idx for idx in range(len(run) - 1, -1, -1) if run[idx].rtc_anchor_idx != -1),
@@ -385,8 +397,32 @@ def clean_timestamps(rows: list[dict]) -> list[dict]:
                     logger.warning("Detected multiple consecutive epoch windows without RTC anchor, skipping correction.", run=run)
                 else:
                     logger.info("Detected multiple consecutive epoch windows, guessing will be applied.", run=run)
-                    _shift_window(working, run[anchor_win_idx])
-                    _guess_epoch_windows(working, run)
+                    anchor_win = run[anchor_win_idx]
+                    adjusted_anchor = Window(
+                        start_idx=anchor_win.start_idx + row_offset,
+                        end_idx=anchor_win.end_idx + row_offset,
+                        start_dt=anchor_win.start_dt,
+                        end_dt=anchor_win.end_dt,
+                        rtc_anchor_idx=anchor_win.rtc_anchor_idx + row_offset,
+                        rtc_anchor_dt=anchor_win.rtc_anchor_dt,
+                        is_guessed=anchor_win.is_guessed
+                    )
+                    _shift_window(working, adjusted_anchor)
+
+                    adjusted_run = [
+                        Window(
+                            start_idx=w.start_idx + row_offset,
+                            end_idx=w.end_idx + row_offset,
+                            start_dt=w.start_dt,
+                            end_dt=w.end_dt,
+                            rtc_anchor_idx=w.rtc_anchor_idx + row_offset if w.rtc_anchor_idx != -1 else -1,
+                            rtc_anchor_dt=w.rtc_anchor_dt,
+                            is_guessed=w.is_guessed
+                        )
+                        for w in run
+                    ]
+                    inserted = _guess_epoch_windows(working, adjusted_run)
+                    row_offset += inserted
             i = j
         else:
             logger.info("Normal window detected, applying correction.", window=win)
