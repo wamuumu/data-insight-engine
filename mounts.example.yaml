@@ -5,6 +5,10 @@ volumes:
     target: /app/src
     readonly: false
 
+  - path: ./alembic
+    target: /app/alembic
+    readonly: false
+
   # Mandatory volumes
   - path: ./logs
     target: /app/logs

@@ -51,25 +51,23 @@ DOCKER_RUN = docker run --rm -it \
 	$(DOCKER_DATA_VOLUMES) \
 	$(APP_IMAGE):latest
 
-.PHONY: help build up down shell db migrate migrate-new test-unit test-integration test lint lint-fix format typecheck
+.PHONY: help build up down shell db migrate test-unit test-integration test lint lint-fix format typecheck
 
 # ── Default target ─────────────────────────────────────────────
 help:
 	@echo ""
-	@printf "$(CYAN)Usage: make [target]$(RESET)\n"
+	@printf "Usage: make [target]\n"
 	@echo ""
 	@printf "  $(GREEN)make build$(RESET)\t\t\tBuild the app Docker image\n"
 	@printf "  $(GREEN)make up$(RESET)\t\t\tStart all services in detached mode\n"
 	@printf "  $(GREEN)make down$(RESET)\t\t\tStop and remove containers\n"
 	@printf "  $(GREEN)make shell$(RESET)\t\t\tOpen a shell in the app container\n"
 	@printf "  $(GREEN)make db$(RESET)\t\t\tConnect to the database container\n"
+	@printf "  $(GREEN)make migrate$(RESET)\t\t\tApply all pending database migrations\n"
 	@echo ""
-	@printf "  $(YELLOW)make migrate$(RESET)\t\t\tApply all pending database migrations\n"
-	@printf "  $(YELLOW)make migrate-new m=<msg>$(RESET)\tGenerate a new migration (autogenerate with message)\n"
-	@echo ""
-	@printf "  $(BLUE)make test-unit$(RESET)\t\tRun unit tests\n"
-	@printf "  $(BLUE)make test-integration$(RESET)\t\tRun integration tests\n"
-	@printf "  $(BLUE)make test$(RESET)\t\t\tRun all tests\n"
+	@printf "  $(YELLOW)make test-unit$(RESET)\t\tRun unit tests\n"
+	@printf "  $(YELLOW)make test-integration$(RESET)\t\tRun integration tests\n"
+	@printf "  $(YELLOW)make test$(RESET)\t\t\tRun all tests\n"
 	@echo ""
 	@printf "  $(CYAN)make lint$(RESET)\t\t\tRun linter checks\n"
 	@printf "  $(CYAN)make lint-fix$(RESET)\t\t\tRun linter checks and fix issues\n"
@@ -104,13 +102,6 @@ db:
 migrate:
 	@printf "$(YELLOW)Applying database migrations$(RESET)\n"
 	@$(DOCKER_RUN) alembic -c alembic.ini upgrade head
-
-migrate-new:
-	ifndef m
-		$(error You must pass migration message: make migrate-new m="message")
-	endif
-	@printf "$(YELLOW)Generating migration: $(m)$(RESET)\n"
-	@$(DOCKER_RUN) alembic -c alembic.ini revision --autogenerate -m "$(m)"
 
 test-unit:
 	@printf "$(BLUE)Running unit tests$(RESET)\n"
