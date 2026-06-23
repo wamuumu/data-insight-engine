@@ -18,7 +18,7 @@ class HistoryLog(BaseModel):
     )
 
     # ── Firmware and event details ──────────────────────────────
-    firmware_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    firmware_version: Mapped[int] = mapped_column(Integer, nullable=True)
     event_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_id: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     value: Mapped[int] = mapped_column(Integer, nullable=False)

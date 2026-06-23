@@ -37,7 +37,7 @@ def upgrade():
         sa.Column(
             "device_id", sa.Integer(), sa.ForeignKey("device.id"), nullable=False
         ),
-        sa.Column("firmware_version", sa.Integer(), nullable=False),
+        sa.Column("firmware_version", sa.Integer(), nullable=True),
         sa.Column("event_ts", sa.DateTime(timezone=True), nullable=False),
         sa.Column("event_id", sa.SmallInteger(), nullable=False),
         sa.Column("value", sa.Integer(), nullable=False),
