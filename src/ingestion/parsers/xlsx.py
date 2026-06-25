@@ -1,7 +1,6 @@
 from typing import Generator
 
-import openpyxl
-from openpyxl import Workbook
+import pandas as pd
 
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
@@ -10,6 +9,8 @@ from ingestion.processing.datetime_cleaner import clean_timestamps
 from ingestion.processing.firmware_lookup import build_firmware_lookup
 
 logger = get_logger(__name__)
+
+_COLUMNS = ["counter", "date", "time", "event_id", "description", "value"]
 
 
 class XLSXParser(BaseParser):
@@ -32,97 +33,45 @@ class XLSXParser(BaseParser):
         )
 
         try:
-            workbook = openpyxl.load_workbook(file.path, read_only=True, data_only=True)
+            df = pd.read_excel(file.path, sheet_name=0, header=0, names=_COLUMNS, engine="openpyxl")
         except Exception as e:
-            logger.error("Failed to open XLSX file", path=str(file.path), error=str(e))
+            logger.error("Failed to read XLSX file into DataFrame", path=str(file.path), error=str(e))
             raise
+
+        df = df.dropna(how="all")  # Drop rows where all elements are NaN
+
+        if df.empty:
+            logger.warning("XLSX file has no data rows", path=str(file.path))
+            return
 
         logger.debug(
             "XLSX file opened successfully",
             path=str(file.path),
-            sheets=workbook.sheetnames,
+            num_rows=len(df),
+            columns=list(df.columns)
         )
 
-        if len(workbook.sheetnames) != 1:
-            logger.warning(
-                "Expected exactly one sheet in XLSX file, found %d.",
-                len(workbook.sheetnames),
-                path=str(file.path),
-                found_sheets=len(workbook.sheetnames),
-            )
+        firmware_lookup = build_firmware_lookup(df)
 
-        try:
-            yield from self._parse_workbook(file, workbook)
-        finally:
-            workbook.close()
+        raw_records = [
+            {
+                "event_date": row.date,
+                "event_time": row.time,
+                "event_id": row.event_id,
+                "value": row.value,
+                "firmware_version": firmware_lookup(idx),
+            }
+            for idx, row in enumerate(df.itertuples(index=False))
+        ]
 
-    def _parse_workbook(
-        self, file: BaseFile, workbook: Workbook
-    ) -> Generator[HistoryLogRecord, None, None]:
-        """
-        Parse the workbook and yield HistoryLogRecord instances. This method assumes the workbook is already open.
-        """
-        abs_row_index = 0
+        cleaned_records = clean_timestamps(raw_records)
 
-        for sheet_name in workbook.sheetnames:
-            sheet = workbook[sheet_name]
-            rows_iter = sheet.iter_rows(values_only=True)
+        logger.info(
+            "RTC timestamps cleaning completed",
+            raw_records_count=len(raw_records),
+            cleaned_records_count=len(cleaned_records),
+            diff=len(cleaned_records) - len(raw_records)
+        )
 
-            # Read header, assuming the first row contains column names
-            try:
-                header = [
-                    str(h).strip() if h is not None else f"column_{i}"
-                    for i, h in enumerate(next(rows_iter))
-                ]
-            except StopIteration:
-                logger.warning(
-                    "Sheet %s in file %s is empty, skipping.", sheet_name, file.path
-                )
-                continue
-
-            all_rows = [
-                row for row in rows_iter if not all(cell is None for cell in row)
-            ]  # Skip empty rows
-
-            # Build firmware index over the sheet's rows
-            firmware_lookup = build_firmware_lookup(file, header, all_rows)
-
-            # create a mapping of header names to their column indices for easy access
-            header_mapping = {col: i for i, col in enumerate(header)}
-
-            event_id_col = header_mapping.get("Event ID")
-            value_col = header_mapping.get("Value")
-            date_col = header_mapping.get("Date")
-            time_col = header_mapping.get("Time")
-
-            raw_records: list[dict] = []
-            for _, row in enumerate(all_rows):
-                record_data: dict = {}
-
-                # ── Required fields ───────────────────────────────────────
-                record_data["event_date"] = row[date_col]
-                record_data["event_time"] = row[time_col]
-                record_data["event_id"] = row[event_id_col]
-                record_data["value"] = row[value_col]
-
-                # ── Derived fields ────────────────────────────────────────
-                record_data["firmware_version"] = firmware_lookup(abs_row_index)
-
-                raw_records.append(record_data)
-                abs_row_index += 1
-            
-            cleaned_records = clean_timestamps(raw_records)
-            logger.info(
-                "RTC timestamps cleaning completed",
-                raw_records_count=len(raw_records),
-                cleaned_records_count=len(cleaned_records),
-                diff=len(cleaned_records) - len(raw_records)
-            )
-
-            # for i, record in enumerate(cleaned_records):
-            #     logger.debug(f"{i}", **record)
-
-            for record_data in cleaned_records:
-                yield HistoryLogRecord(source_file=str(file.path), data=record_data)
-
-
+        for record_data in cleaned_records:
+            yield HistoryLogRecord(source_file=str(file.path), data=record_data)

@@ -1,36 +1,34 @@
 import bisect
 from typing import Callable
 
+import pandas as pd
+
 from common.constants import (
     SWITCH_ON_EVENT_ID,
     SWITCH_OFF_EVENT_ID,
     UNDEFINED_FIRMWARE_VERSION,
 )
 from common.logging import get_logger
-from ingestion.crawler.base import BaseFile
 
 logger = get_logger(__name__)
 
 
 def _build_firmware_index(
-    file: BaseFile, header: list[str], rows: list[tuple]
+    df: pd.DataFrame
 ) -> list[tuple[int, int, int]]:
     switch_events: list[tuple[int, int, int]] = []
 
-    event_id_col = header.index("Event ID") if "Event ID" in header else None
-    firmware_col = header.index("Value") if "Value" in header else None
-
-    if event_id_col is None or firmware_col is None:
+    if "event_id" not in df.columns or "value" not in df.columns:
         logger.warning(
-            "Sheet is missing 'Event ID' or 'Value' columns, skipping firmware index building.",
-            path=str(file.path),
+            "DataFrame does not contain required columns for firmware lookup.",
+            columns=list(df.columns),
         )
         return switch_events
 
-    for abs_row_index, row in enumerate(rows):
+    for abs_row_index, row in enumerate(df.itertuples(index=False)):
         try:
-            event_id = int(row[event_id_col])
-            firmware_value = int(row[firmware_col])
+            event_id = int(row.event_id)
+            firmware_value = int(row.value)
         except (ValueError, TypeError):
             continue
 
@@ -41,7 +39,8 @@ def _build_firmware_index(
 
 
 def _partition_firmware_regions(
-    file: BaseFile, switch_events: list[tuple[int, int, int]], total_rows: int
+    switch_events: list[tuple[int, int, int]],
+    total_rows: int
 ) -> list[tuple[int, int, int]]:
     segments: list[tuple[int, int, int]] = []
     pending_start = 0
@@ -88,11 +87,11 @@ def _partition_firmware_regions(
                 last_firmware = firmware_value
         else:
             logger.warning(
-                "Unexpected last event type %s while processing firmware segments.",
-                last_type,
-                path=str(file.path),
+                "Unexpected last_type encountered during firmware region partitioning.",
+                last_type=last_type,
                 row_index=row_index,
                 event_id=event_id,
+                firmware_value=firmware_value
             )
 
     firmware_to_use = (
@@ -120,11 +119,9 @@ def _create_firmware_resolver(
     return lookup
 
 def build_firmware_lookup(
-    file: BaseFile, 
-    header: list[str], 
-    rows: list[tuple],
+    df: pd.DataFrame
 ) -> Callable[[int], int | None]:
-    switch_events = _build_firmware_index(file, header, rows)
-    segments = _partition_firmware_regions(file, switch_events, len(rows))
+    switch_events = _build_firmware_index(df)
+    segments = _partition_firmware_regions(switch_events, len(df))
     firmware_lookup = _create_firmware_resolver(segments)
     return firmware_lookup

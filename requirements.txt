@@ -1,6 +1,8 @@
 # Data processing
+pandas
 pyarrow
 openpyxl
+scipy
 
 # Database
 sqlalchemy
