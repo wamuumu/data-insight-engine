@@ -302,6 +302,8 @@ class IngestionPipeline:
                         f"Incomplete record insertion: produced={produced}, inserted={inserted}",
                     )
 
+                    # TODO: SEV cannot go to quarantine, HL yes but with upsert we don't care too much (change above code)
+
             except Exception as e:
                 stats.files_failed += 1
                 files_processed.labels(
@@ -536,17 +538,17 @@ class IngestionPipeline:
                     "Unknown record type encountered in batch, skipping.", record=record
                 )
 
-        inserted_history_logs = 0
+        upserted_history_logs = 0
         inserted_special_events = 0
 
         if history_logs:
-            inserted_history_logs = self.history_log_repo.insert_history_logs(
+            upserted_history_logs = self.history_log_repo.upsert_history_logs(
                 session, history_logs, device_id, source_file_id
             )
-            records_ingested.labels(table="history_log").inc(inserted_history_logs)
+            records_ingested.labels(table="history_log").inc(upserted_history_logs)
             logger.debug(
-                "Inserted history log records in transaction.",
-                inserted=inserted_history_logs,
+                "Upserted history log records in transaction.",
+                upserted=upserted_history_logs,
             )
 
         if special_events:
@@ -559,4 +561,4 @@ class IngestionPipeline:
                 inserted=inserted_special_events,
             )
 
-        return inserted_history_logs + inserted_special_events  # Return total inserted records
+        return upserted_history_logs + inserted_special_events  # Return total inserted records

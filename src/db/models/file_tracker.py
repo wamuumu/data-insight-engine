@@ -13,6 +13,8 @@ class FileStatus(StrEnum):
     DONE = "done"
     FAILED = "failed"
 
+# TODO: is file available? is deleted?
+# TODO: add rows_inserted field?
 
 class FileTracker(BaseModel):
     __tablename__ = "file_tracker"

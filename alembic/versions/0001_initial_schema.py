@@ -37,7 +37,7 @@ def upgrade():
         sa.Column(
             "device_id", sa.Integer(), sa.ForeignKey("device.id"), nullable=False
         ),
-        sa.Column("firmware_version", sa.Integer(), nullable=True),
+        sa.Column("firmware_version", sa.Integer(), nullable=False),
         sa.Column("event_ts", sa.DateTime(timezone=True), nullable=False),
         sa.Column("event_id", sa.SmallInteger(), nullable=False),
         sa.Column("value", sa.Integer(), nullable=False),
@@ -45,12 +45,15 @@ def upgrade():
             "source_file_id",
             sa.Integer(),
             sa.ForeignKey("file_tracker.id"),
-            nullable=True,
+            nullable=True,      # TODO: should this be nullable? How we handle file deletion?
         ),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "idx_history_log_device_ts", "history_log", ["device_id", "event_ts"]
+        sa.UniqueConstraint(
+            "device_id",
+            "event_ts",
+            "event_id",
+            name="uq_history_log_row",
+        )
     )
 
     # ── SpecialEvent ───────────────────────────────────────

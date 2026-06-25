@@ -6,6 +6,7 @@ from common.constants import PARQUET_DROP_COLUMNS
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, SpecialEventRecord
+from ingestion.processing.event_statistics import compute_event_statistics
 
 logger = get_logger(__name__)
 
@@ -35,9 +36,6 @@ class ParquetParser(BaseParser):
     """
     Parser for Parquet Special Event files.
     """
-
-    def __init__(self, batch_size: int = 500):
-        self.batch_size = batch_size
 
     def can_handle(self, file: BaseFile) -> bool:
         """
@@ -70,13 +68,17 @@ class ParquetParser(BaseParser):
             columns=list(df.columns)
         )
 
-        pf = (
+        df = (
             df.drop(columns=PARQUET_DROP_COLUMNS, errors="ignore")
             .rename(columns=_HEADER_MAPPING)
             [list(_HEADER_MAPPING.values())]
         )
 
-        for start in range(0, len(pf), self.batch_size):
-            batch_df = pf.iloc[start:start + self.batch_size]
-            for row in batch_df.itertuples(index=False):
-                yield SpecialEventRecord(source_file=file.path, data=row._asdict())
+        statistics = compute_event_statistics(df)
+
+        logger.debug(
+            "Computed event statistics",
+            statistics=statistics
+        )
+
+        yield SpecialEventRecord(source_file=file.path, data=statistics)
