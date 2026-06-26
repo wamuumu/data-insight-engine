@@ -2,7 +2,6 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from common.logging import get_logger
-from common.utils import combine_date_time
 from db.repositories.base import BaseRepository
 from db.models.history_log import HistoryLog
 from ingestion.parsers.base import HistoryLogRecord
@@ -48,15 +47,11 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         """
         Convert a HistoryLogRecord to a dictionary suitable for database insertion.
         """
-        raw_date: str = record.data.get("event_date")
-        raw_time: str = record.data.get("event_time")
-
-        event_dt = combine_date_time(raw_date, raw_time)
 
         return {
             "device_id": device_id,
             "firmware_version": record.data.get("firmware_version"),
-            "event_ts": event_dt,
+            "event_ts": record.data.get("event_datetime"),
             "event_id": record.data.get("event_id"),
             "value": record.data.get("value"),
             "source_file_id": source_file_id,

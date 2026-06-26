@@ -24,10 +24,17 @@ def setup_logging(log_level: str, log_format: str):
         else structlog.dev.ConsoleRenderer(colors=False)
     )
 
+    def uppercase_log_level(_, __, event_dict):
+        for key in ("level", "levelname"):
+            if key in event_dict and isinstance(event_dict[key], str):
+                event_dict[key] = event_dict[key].upper()
+        return event_dict
+
     shared_processors = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
+        uppercase_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,

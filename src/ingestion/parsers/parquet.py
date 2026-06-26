@@ -1,5 +1,3 @@
-from typing import Generator
-
 import pandas as pd
 
 from common.constants import PARQUET_DROP_COLUMNS
@@ -31,7 +29,6 @@ _HEADER_MAPPING = {
     "GPS_Fix": "gps_fix",
 }
 
-
 class ParquetParser(BaseParser):
     """
     Parser for Parquet Special Event files.
@@ -43,9 +40,9 @@ class ParquetParser(BaseParser):
         """
         return file.suffix == ".parquet"
 
-    def parse(self, file: BaseFile) -> Generator[SpecialEventRecord, None, None]:
+    def parse(self, file: BaseFile) -> SpecialEventRecord:
         """
-        Parse the Parquet file and yield records as dictionaries.
+        Parse the Parquet file and return computed event statistics.
         """
         logger.info(
             "Parsing Parquet file",
@@ -81,4 +78,4 @@ class ParquetParser(BaseParser):
             statistics=statistics
         )
 
-        yield SpecialEventRecord(source_file=file.path, data=statistics)
+        return SpecialEventRecord(source_file=file.path, data=statistics)

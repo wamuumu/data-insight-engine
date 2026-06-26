@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Generator, Any, Union
+from dataclasses import dataclass
+from typing import Any, Union, Iterator
 
 
 class HistoryLogRecord:
@@ -7,14 +8,25 @@ class HistoryLogRecord:
     Container for a history log record.
     """
 
-    __slots__ = ["source_file", "data"]
+    __slots__ = ["source_file", "data", "is_rollover"]
 
-    def __init__(self, source_file: str, data: dict[str, Any]):
+    def __init__(self, source_file: str, data: dict[str, Any], is_rollover: bool = False):
         self.source_file = source_file
         self.data = data
+        self.is_rollover = is_rollover
 
     def __repr__(self):
-        return f"HistoryLogRecord(source_file={self.source_file}, data={self.data})"
+        return f"HistoryLogRecord(source_file={self.source_file}, data={self.data}, is_rollover={self.is_rollover})"
+
+
+@dataclass
+class HistoryLogStream:
+    """
+    Container for a stream of history log records, along with additional information.
+    """
+    records: Iterator[HistoryLogRecord]
+    rollover_detected: bool
+    rollover_index: int | None
 
 
 class SpecialEventRecord:
@@ -47,8 +59,8 @@ class BaseParser(ABC):
     @abstractmethod
     def parse(
         self, file: Any
-    ) -> Generator[Union[HistoryLogRecord, SpecialEventRecord], None, None]:
+    ) -> Union[HistoryLogStream, SpecialEventRecord]:
         """
-        Parse the given file and yield record instances (either HistoryLogRecord or SpecialEventRecord).
+        Parse the given file and yield either history log records or a special event record.
         """
         ...

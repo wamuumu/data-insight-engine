@@ -1,10 +1,8 @@
-from typing import Generator
-
 import pandas as pd
 
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
-from ingestion.parsers.base import BaseParser, HistoryLogRecord
+from ingestion.parsers.base import BaseParser, HistoryLogRecord, HistoryLogStream
 from ingestion.processing.datetime_cleaner import clean_timestamps
 from ingestion.processing.firmware_lookup import build_firmware_lookup
 
@@ -24,9 +22,9 @@ class XLSXParser(BaseParser):
         """
         return file.suffix == ".xlsx"
 
-    def parse(self, file: BaseFile) -> Generator[HistoryLogRecord, None, None]:
+    def parse(self, file: BaseFile) -> HistoryLogStream:
         """
-        Parse the XLSX file and yield records as dictionaries.
+        Parse the XLSX file and yield HistoryLogRecord instances. Cleans timestamps and builds firmware version lookup.
         """
         logger.info(
             "Parsing XLSX file", path=str(file.path), size_mb=round(file.size / 1e6, 2)
@@ -42,7 +40,7 @@ class XLSXParser(BaseParser):
 
         if df.empty:
             logger.warning("XLSX file has no data rows", path=str(file.path))
-            return
+            return HistoryLogStream(records=iter([]), rollover_detected=False, rollover_index=None)
 
         logger.debug(
             "XLSX file opened successfully",
@@ -51,27 +49,31 @@ class XLSXParser(BaseParser):
             columns=list(df.columns)
         )
 
-        firmware_lookup = build_firmware_lookup(df)
-
-        raw_records = [
-            {
-                "event_date": row.date,
-                "event_time": row.time,
-                "event_id": row.event_id,
-                "value": row.value,
-                "firmware_version": firmware_lookup(idx),
-            }
-            for idx, row in enumerate(df.itertuples(index=False))
-        ]
-
-        cleaned_records = clean_timestamps(raw_records)
+        cleaned_records, rollover_index = clean_timestamps(df)
 
         logger.info(
             "RTC timestamps cleaning completed",
-            raw_records_count=len(raw_records),
-            cleaned_records_count=len(cleaned_records),
-            diff=len(cleaned_records) - len(raw_records)
+            num_cleaned_records=len(cleaned_records),
+            diff=len(df) - len(cleaned_records)
         )
 
-        for record_data in cleaned_records:
-            yield HistoryLogRecord(source_file=str(file.path), data=record_data)
+        firmware_lookup = build_firmware_lookup(cleaned_records)
+
+        def record_generator():
+            for idx, row in enumerate(cleaned_records.itertuples(index=False)):
+                yield HistoryLogRecord(
+                    source_file=str(file.path),
+                    data={
+                        "event_datetime": row.datetime,
+                        "event_id": row.event_id,
+                        "value": row.value,
+                        "firmware_version": firmware_lookup(idx),
+                    },
+                    is_rollover=row.rollover
+                )
+            
+        return HistoryLogStream(
+            records=record_generator(),
+            rollover_detected=rollover_index is not None,
+            rollover_index=rollover_index
+        )
