@@ -54,9 +54,7 @@ class PipelineStats:
     files_deduplicated: int = 0  # Alredy processed, skipped based on identity
     files_failed: int = 0  # Files that failed to process due to errors
     records_produced: int = 0  # Total number of records produced by parsers
-    records_inserted: int = (
-        0  # Total number of records successfully inserted into the database
-    )
+    records_inserted: int = 0  # Total number of records successfully inserted into the database
 
     def merge(self, other: PipelineStats):
         """
@@ -215,6 +213,9 @@ class IngestionPipeline:
 
         device_id: int | None = None
         file_tracker_id: int | None = None
+
+        # TODO: for HLs, retrive last log. If it is still present in the file, update
+        # the file tracker to point to the new file.
 
         if not self.dry_run:
             with get_db_session(self.session_factory) as session:
@@ -406,15 +407,34 @@ class IngestionPipeline:
         batch: list[HistoryLogRecord | SpecialEventRecord] = []
         deadline = monotonic() + settings.file_retry_timeout
 
-        for record in parser.parse(file):
-            total_produced += 1
-            batch.append(record)
+        parsed = parser.parse(file)
 
-            if len(batch) >= settings.db_batch_size:
-                total_inserted += self._persist_batch(
-                    batch, device_id, source_file_id, deadline
-                )
-                batch.clear()
+        if isinstance(parsed, SpecialEventRecord):
+            total_produced += 1
+            batch = [parsed]
+        else:
+            
+            hl_records = parsed.records
+            is_rollover = parsed.rollover_index is not None
+            rollover_index = parsed.rollover_index
+
+            for idx, record in enumerate(hl_records):
+
+                if is_rollover and rollover_index == idx:
+                    logger.debug("Splitting batch due to rollover detection", index=idx)
+                    total_inserted += self._persist_batch(
+                        batch, device_id, source_file_id, deadline
+                    )
+                    batch.clear()
+
+                total_produced += 1
+                batch.append(record)
+
+                if len(batch) >= settings.db_batch_size:
+                    total_inserted += self._persist_batch(
+                        batch, device_id, source_file_id, deadline
+                    )
+                    batch.clear()
 
         if batch:
             total_inserted += self._persist_batch(

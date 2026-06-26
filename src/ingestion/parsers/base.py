@@ -25,7 +25,6 @@ class HistoryLogStream:
     Container for a stream of history log records, along with additional information.
     """
     records: Iterator[HistoryLogRecord]
-    rollover_detected: bool
     rollover_index: int | None
 
 

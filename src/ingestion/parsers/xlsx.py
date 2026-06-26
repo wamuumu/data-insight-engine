@@ -74,6 +74,5 @@ class XLSXParser(BaseParser):
             
         return HistoryLogStream(
             records=record_generator(),
-            rollover_detected=rollover_index is not None,
             rollover_index=rollover_index
         )
