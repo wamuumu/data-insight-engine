@@ -42,7 +42,7 @@ def init_db(db_url: str, log_level: str = "INFO") -> sessionmaker:
     verbose = log_level.upper() == "DEBUG"
     engine = build_engine(db_url, verbose=verbose)
 
-    logger.info("Testing database connectivity...")
+    logger.debug("Testing database connectivity...")
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
     logger.info("Database connectivity OK")

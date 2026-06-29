@@ -264,7 +264,7 @@ def _guess_epoch_windows(
 
         df = _insert_row(df, current_end + 1, guessed_row)
 
-        logger.info(
+        logger.debug(
             "Inserted RTC GUESSED event.",
             index=current_end + 1,
             guessed_anchor_dt=guessed_anchor_dt,
@@ -324,7 +324,7 @@ def _normalize_stage(df: pd.DataFrame) -> pd.DataFrame:
             and curr_dt < prev_dt
         ):
             if df.at[i, "event_id"] == SWITCH_ON_EVENT_ID:
-                logger.info("Detected SWITCH_ON event with backward timestamp, adjusting.", index=i)
+                logger.debug("Detected SWITCH_ON event with backward timestamp, adjusting.", index=i)
                 df.at[i, "datetime"] = prev_dt + timedelta(milliseconds=1)
             else:
                 logger.warning("Detected backward timestamp without SWITCH_ON event, skipping correction.", index=i)
@@ -377,7 +377,7 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
                 anchor = next((w for w in reversed(run) if w.rtc_anchor_idx != -1), None)
 
                 if anchor:
-                    logger.info("Detected multiple consecutive epoch windows, guessing will be applied.", windows=run)
+                    logger.warning("Detected multiple consecutive epoch windows, guessing will be applied.", windows=run)
                     _shift_window(df, Window(
                         start_idx=anchor.start_idx + offset,
                         start_dt=anchor.start_dt,
@@ -408,7 +408,7 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
             i = j
 
         else:
-            logger.info("Detected non-epoch window, applying shift.", window=win)
+            logger.debug("Detected non-epoch window, applying shift.", window=win)
             _shift_window(df, Window(
                 start_idx=win.start_idx + offset,
                 start_dt=win.start_dt,
@@ -449,7 +449,7 @@ def _rollover_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
         logger.info("Detected rollover in logs, marking rows after rollover index.", rollover_index=rollover_idx)
         sorted_df.loc[rollover_idx:, "rollover"] = True
     else:
-        logger.info("No rollover detected in logs.")
+        logger.debug("No rollover detected in logs.")
 
     return sorted_df, rollover_idx
 

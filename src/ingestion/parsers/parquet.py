@@ -44,7 +44,7 @@ class ParquetParser(BaseParser):
         """
         Parse the Parquet file and return computed event statistics.
         """
-        logger.info(
+        logger.debug(
             "Parsing Parquet file",
             path=str(file.path),
             size_mb=round(file.size / 1e6, 2),
@@ -74,8 +74,8 @@ class ParquetParser(BaseParser):
         statistics = compute_event_statistics(df)
 
         logger.debug(
-            "Computed event statistics",
-            statistics=statistics
+            "Special event statistics computed",
+            num_statistics=len(statistics)
         )
 
         return SpecialEventRecord(source_file=file.path, data=statistics)

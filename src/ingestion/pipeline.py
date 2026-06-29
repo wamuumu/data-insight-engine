@@ -118,7 +118,7 @@ class IngestionPipeline:
             stats = PipelineStats()
             if settings.workers <= 1 or len(files) == 1:
                 # Single-thread multi-file or single-file
-                logger.info(
+                logger.debug(
                     "Running in single-threaded mode.",
                     workers=settings.workers,
                     files=len(files),
@@ -134,7 +134,7 @@ class IngestionPipeline:
                     for future in as_completed(futures):
                         local_stats = future.result()
                         if local_stats:
-                            logger.info(
+                            logger.debug(
                                 "File processing completed in thread.",
                                 **local_stats.to_dict(suffix="thread"),
                             )
@@ -156,12 +156,12 @@ class IngestionPipeline:
         Discover files in the root directory using the crawler.
         """
         if self.file_mode:
-            logger.info(
+            logger.debug(
                 "File mode enabled. Skipping file discovery.", root=str(self.root)
             )
             return [BaseFile(self.root)]  # Return the single file as a list
         else:
-            logger.info(
+            logger.debug(
                 "File mode disabled. Starting file discovery.", root=str(self.root)
             )
             return list(self.crawler.crawl())
@@ -328,6 +328,8 @@ class IngestionPipeline:
                 reason=reason,
             )
             return
+        
+        logger.warning("Quarantining file due to processing failure", file_tracker_id=file_tracker_id, reason=reason)
 
         try:
             with get_db_session(self.session_factory) as session:
@@ -533,6 +535,13 @@ class IngestionPipeline:
                 session, batch, device_id, source_file_id
             )
             records_ingested.labels(table="history_log").inc(inserted)
+            logger.debug(
+                "Inserted history log batch.",
+                batch_size=len(batch),
+                inserted=inserted,
+                device_id=device_id,
+                source_file_id=source_file_id
+            )
             return inserted
 
         elif isinstance(batch[0], SpecialEventRecord):
@@ -540,6 +549,13 @@ class IngestionPipeline:
                 session, batch, device_id, source_file_id
             )
             records_ingested.labels(table="special_event").inc(inserted)
+            logger.debug(
+                "Inserted special event batch.",
+                batch_size=len(batch),
+                inserted=inserted,
+                device_id=device_id,
+                source_file_id=source_file_id
+            )
             return inserted
 
         else:

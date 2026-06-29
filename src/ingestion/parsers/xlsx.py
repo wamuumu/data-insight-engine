@@ -26,7 +26,7 @@ class XLSXParser(BaseParser):
         """
         Parse the XLSX file and yield HistoryLogRecord instances. Cleans timestamps and builds firmware version lookup.
         """
-        logger.info(
+        logger.debug(
             "Parsing XLSX file", path=str(file.path), size_mb=round(file.size / 1e6, 2)
         )
 
@@ -54,7 +54,7 @@ class XLSXParser(BaseParser):
         logger.info(
             "RTC timestamps cleaning completed",
             num_cleaned_records=len(cleaned_records),
-            diff=len(df) - len(cleaned_records)
+            diff=len(cleaned_records) - len(df)
         )
 
         firmware_lookup = build_firmware_lookup(cleaned_records)
