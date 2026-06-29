@@ -423,7 +423,7 @@ class IngestionPipeline:
             total_produced += 1
             batch = [parsed]
 
-            total_inserted = self._persist_batch(
+            total_inserted += self._persist_batch(
                 batch, device_id, source_file_id, deadline
             )
 

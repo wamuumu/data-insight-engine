@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 
 from scipy.stats import skew, kurtosis
-from scipy.signal import find_peaks
 
 
 def _compute_mean(data: np.ndarray) -> float:
@@ -45,14 +44,20 @@ def _compute_magnitude(data: np.ndarray) -> np.ndarray:
     return np.linalg.norm(data, axis=1)
 
 
-def _compute_jerk(data: np.ndarray, sample_rate_hz: float = 1000.0) -> np.ndarray:
+def _compute_jerk(
+        data: np.ndarray, 
+        sample_rate_hz: float = 1000.0
+) -> np.ndarray:
     # IMU sampling rate is 1KHz, so dt = 0.001s
     dt = 1.0 / sample_rate_hz
     jerk = np.diff(data, axis=0) / dt
     return _compute_magnitude(jerk)
 
 
-def _compute_pearson_correlation(data1: np.ndarray, data2: np.ndarray) -> float:
+def _compute_pearson_correlation(
+        data1: np.ndarray, 
+        data2: np.ndarray
+) -> float:
     if len(data1) != len(data2):
         raise ValueError("Input arrays must have the same length.")
     correlation = float(np.corrcoef(data1, data2)[0, 1])
@@ -60,7 +65,8 @@ def _compute_pearson_correlation(data1: np.ndarray, data2: np.ndarray) -> float:
 
 
 def _compute_total_angular_displacement_deg(
-    gyro_data: np.ndarray, sample_rate_hz: float = 1000.0
+    gyro_data: np.ndarray, 
+    sample_rate_hz: float = 1000.0
 ) -> float:
     # Integrate gyro data to get total angular displacement in degrees
     # Assuming data is in deg/s and sampled at 1KHz
@@ -69,27 +75,31 @@ def _compute_total_angular_displacement_deg(
     return float(np.sum(magnitude * dt))
 
 
-def _compute_peak_features(
+def _compute_zero_crossing(data: np.ndarray) -> int:
+    centered = data - _compute_mean(data)
+    signs = np.sign(centered)
+    signs[signs == 0] = 1  # Treat zeros as positive to avoid false crossings
+    return np.count_nonzero(np.diff(signs))
+
+def _compute_peak_count_over_thresholds(
     data: np.ndarray,
-    sample_rate_hz: float = 1000.0,
-    prominence_floor: float = 15.0,  # TODO: is this good?
-) -> tuple[int, float, float]:
+    thresholds: list[float]
+) -> dict:
+    centered = data - _compute_mean(data)
 
-    magnitude = _compute_magnitude(data)
-    dt_ms = 1000.0 / sample_rate_hz
-    global_peak_index = np.argmax(magnitude)
+    signs = np.sign(centered)
+    signs[signs == 0] = 1  # Treat zeros as positive to
+    zero_crossings = np.flatnonzero(np.diff(signs)) + 1
 
-    time_to_peak_ms = float(global_peak_index * dt_ms)
+    bounds = np.r_[0, zero_crossings, len(centered)]
 
-    peaks, properties = find_peaks(magnitude, prominence=prominence_floor)
-    n_peaks = len(peaks)
+    peaks = np.array([
+        np.max(np.abs(centered[bounds[i]:bounds[i+1]]))
+        for i in range(len(bounds) - 1)
+        if bounds[i] != bounds[i+1]
+    ])
 
-    if n_peaks > 0:
-        mean_prominence = float(np.mean(properties["prominences"]))
-    else:
-        mean_prominence = 0.0
-
-    return n_peaks, time_to_peak_ms, mean_prominence
+    return {t: int(np.sum(peaks >= t)) for t in thresholds}
 
 
 def compute_event_statistics(df: pd.DataFrame) -> dict:
@@ -98,25 +108,22 @@ def compute_event_statistics(df: pd.DataFrame) -> dict:
     acc_y = df.acc_y.to_numpy()
     acc_z = df.acc_z.to_numpy()
     acc_3d = np.column_stack((acc_x, acc_y, acc_z))
+    
     gyro_x = df.gyro_x.to_numpy()
     gyro_y = df.gyro_y.to_numpy()
     gyro_z = df.gyro_z.to_numpy()
     gyro_3d = np.column_stack((gyro_x, gyro_y, gyro_z))
+    
     lat = df.lat.to_numpy()
     lon = df.lon.to_numpy()
     hdop = df.hdop.to_numpy()
     speed = df.speed.to_numpy()
     gps_fix = df.gps_fix.to_numpy()
+    
     algo_enabled = df.algo_enabled.to_numpy()
     algo_ignited = df.algo_ignited.to_numpy()
-    matches = np.flatnonzero(algo_ignited == 1)
-
-    acc_peak_count, acc_time_to_peak_ms, acc_mean_peak_prominence = (
-        _compute_peak_features(acc_3d)
-    )
-    gyro_peak_count, gyro_time_to_peak_ms, gyro_mean_peak_prominence = (
-        _compute_peak_features(gyro_3d)
-    )
+    mask = (algo_enabled == 1) & (algo_ignited == 1)
+    idx = np.flatnonzero(mask)[0] if mask.any() else None
 
     return {
         # Accelerometer statistics (m/s²)
@@ -147,6 +154,9 @@ def compute_event_statistics(df: pd.DataFrame) -> dict:
         "acc_x_kurtosis": _compute_kurtosis(acc_x),
         "acc_y_kurtosis": _compute_kurtosis(acc_y),
         "acc_z_kurtosis": _compute_kurtosis(acc_z),
+        "acc_x_zero_crossings": _compute_zero_crossing(acc_x),
+        "acc_y_zero_crossings": _compute_zero_crossing(acc_y),
+        "acc_z_zero_crossings": _compute_zero_crossing(acc_z),
         # Gyroscope statistics (deg/s)
         "gyro_x_mean": _compute_mean(gyro_x),
         "gyro_y_mean": _compute_mean(gyro_y),
@@ -175,6 +185,9 @@ def compute_event_statistics(df: pd.DataFrame) -> dict:
         "gyro_x_kurtosis": _compute_kurtosis(gyro_x),
         "gyro_y_kurtosis": _compute_kurtosis(gyro_y),
         "gyro_z_kurtosis": _compute_kurtosis(gyro_z),
+        "gyro_x_zero_crossings": _compute_zero_crossing(gyro_x),
+        "gyro_y_zero_crossings": _compute_zero_crossing(gyro_y),
+        "gyro_z_zero_crossings": _compute_zero_crossing(gyro_z),
         # Accelerometer magnitudes
         "acc_magnitude_mean": _compute_mean(_compute_magnitude(acc_3d)),
         "acc_magnitude_std": _compute_std(_compute_magnitude(acc_3d)),
@@ -200,9 +213,7 @@ def compute_event_statistics(df: pd.DataFrame) -> dict:
         "gyro_jerk_std": _compute_std(_compute_jerk(gyro_3d)),
         "gyro_jerk_p95": _compute_p95(_compute_jerk(gyro_3d)),
         # Total angular displacement
-        "total_angular_displacement_deg": _compute_total_angular_displacement_deg(
-            gyro_3d
-        ),
+        "total_angular_displacement_deg": _compute_total_angular_displacement_deg(gyro_3d),
         # Inter-axis correlations
         "acc_xy_correlation": _compute_pearson_correlation(acc_x, acc_y),
         "acc_xz_correlation": _compute_pearson_correlation(acc_x, acc_z),
@@ -210,29 +221,20 @@ def compute_event_statistics(df: pd.DataFrame) -> dict:
         "gyro_xy_correlation": _compute_pearson_correlation(gyro_x, gyro_y),
         "gyro_xz_correlation": _compute_pearson_correlation(gyro_x, gyro_z),
         "gyro_yz_correlation": _compute_pearson_correlation(gyro_y, gyro_z),
-        # Peak features
-        "acc_peak_count": acc_peak_count,
-        "acc_time_to_peak_ms": acc_time_to_peak_ms,
-        "acc_mean_peak_prominence": acc_mean_peak_prominence,
-        "gyro_peak_count": gyro_peak_count,
-        "gyro_time_to_peak_ms": gyro_time_to_peak_ms,
-        "gyro_mean_peak_prominence": gyro_mean_peak_prominence,
         # GPS
         "lat_mean": _compute_mean(lat),
         "lon_mean": _compute_mean(lon),
         "hdop_mean": _compute_mean(hdop),
         # Speed
-        "speed_mean": _compute_mean(speed),
-        "speed_std": _compute_std(speed),
-        "speed_min": _compute_min(speed),
         "speed_max": _compute_max(speed),
-        "speed_p95": _compute_p95(speed),
-        "speed_at_ignition": float(speed[matches[0]]) if len(matches) else 0.0,
+        "speed_at_start": next((float(x) for x in speed if x > 0), 0.0),
+        "speed_at_ignition": float(speed[idx]) if idx is not None else 0.0,
+        "speed_at_end": next((float(x) for x in reversed(speed) if x > 0), 0.0),
         # Quality metrics
         "n_samples": len(df),
         "gps_fix_ratio": _compute_mean(gps_fix),
+        "algo_enabled_start": bool(algo_enabled[0]),
+        "algo_enabled_end": bool(algo_enabled[-1]),
         "algo_enabled_ratio": _compute_mean(algo_enabled),
-        "algo_ignited": algo_enabled[matches[0]] and algo_ignited[matches[0]]
-        if len(matches)
-        else False,
+        "algo_ignited": True if idx is not None else False,
     }
