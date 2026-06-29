@@ -45,7 +45,7 @@ def upgrade():
             "source_file_id",
             sa.Integer(),
             sa.ForeignKey("file_tracker.id"),
-            nullable=True,      # TODO: should this be nullable? How we handle file deletion?
+            nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
@@ -82,7 +82,7 @@ def upgrade():
             "source_file_id",
             sa.Integer(),
             sa.ForeignKey("file_tracker.id"),
-            nullable=True,
+            nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
     )

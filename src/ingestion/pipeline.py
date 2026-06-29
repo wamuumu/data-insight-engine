@@ -209,8 +209,8 @@ class IngestionPipeline:
             ).inc()
             return stats
 
-        device_id: int | None = None
-        file_tracker_id: int | None = None
+        device_id: int = -1
+        file_tracker_id: int = -1
         prev_file_tracker_id: int | None = None
 
         if not self.dry_run:
@@ -277,7 +277,7 @@ class IngestionPipeline:
                         status=MetricStatus.SUCCESS, file_type=file.file_type
                     ).inc()
 
-                    if not self.dry_run and file_tracker_id is not None:
+                    if not self.dry_run:
                         with get_db_session(self.session_factory) as session:
                             ft = session.get(FileTracker, file_tracker_id)
                             if ft is not None:
@@ -397,7 +397,7 @@ class IngestionPipeline:
         file: BaseFile,
         parser: BaseParser,
         device_id: int,
-        source_file_id: int | None,
+        source_file_id: int,
         prev_source_file_id: int | None = None,
     ) -> tuple[int, int, bool]:
         """
@@ -413,33 +413,49 @@ class IngestionPipeline:
         if isinstance(parsed, SpecialEventRecord):
             total_produced += 1
             batch = [parsed]
-        else:
-            
-            hl_records = parsed.records
-            rollover_index = parsed.rollover_index
-            rollover_detected = parsed.rollover_index is not None
 
-            for idx, record in enumerate(hl_records):
+            total_inserted = self._persist_batch(batch, device_id, source_file_id, deadline)
 
-                if batch and rollover_detected and rollover_index == idx:
+            return (
+                total_inserted,
+                total_produced,
+                total_inserted == total_produced
+            )
+        
+        hl_records = parsed.records
+        rollover_index = parsed.rollover_index
+        rollover_detected = parsed.rollover_index is not None
+
+        current_file_id = prev_source_file_id or source_file_id
+
+        for idx, record in enumerate(hl_records):
+
+            is_rollover_boundary = (
+                rollover_detected and idx == rollover_index and prev_source_file_id is not None
+            )
+
+            if is_rollover_boundary:
+                if batch:
                     logger.debug("Splitting batch due to rollover detection", rollover_index=idx, batch_size=len(batch), source_file_id=prev_source_file_id)
                     total_inserted += self._persist_batch(
-                        batch, device_id, prev_source_file_id, deadline
+                        batch, device_id, current_file_id, deadline
                     )
                     batch.clear()
+                
+                current_file_id = source_file_id
 
-                total_produced += 1
-                batch.append(record)
+            total_produced += 1
+            batch.append(record)
 
-                if len(batch) >= settings.db_batch_size:
-                    total_inserted += self._persist_batch(
-                        batch, device_id, source_file_id, deadline
-                    )
-                    batch.clear()
+            if len(batch) >= settings.db_batch_size:
+                total_inserted += self._persist_batch(
+                    batch, device_id, current_file_id, deadline
+                )
+                batch.clear()
 
         if batch:
             total_inserted += self._persist_batch(
-                batch, device_id, source_file_id, deadline
+                batch, device_id, current_file_id, deadline
             )
 
         return total_inserted, total_produced, total_inserted == total_produced
@@ -448,7 +464,7 @@ class IngestionPipeline:
         self,
         batch: list[HistoryLogRecord] | list[SpecialEventRecord],
         device_id: int,
-        source_file_id: int | None,
+        source_file_id: int,
         deadline: float
     ) -> int:
         """
@@ -504,7 +520,7 @@ class IngestionPipeline:
         session,
         batch: list[HistoryLogRecord] | list[SpecialEventRecord],
         device_id: int,
-        source_file_id: int | None,
+        source_file_id: int,
     ) -> int:
         """
         Insert a batch of records into the database within a transaction.

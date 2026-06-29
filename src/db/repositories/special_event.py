@@ -19,7 +19,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         session: Session,
         records: list[SpecialEventRecord],
         device_id: int,
-        source_file_id: int | None = None,
+        source_file_id: int,
     ) -> int:
         """
         Batch-insert special event records into the database. Returns the number of records successfully inserted.
@@ -47,7 +47,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         return result
 
     def _special_event_to_row(
-        self, record: SpecialEventRecord, device_id: int, source_file_id: int | None
+        self, record: SpecialEventRecord, device_id: int, source_file_id: int
     ) -> dict:
         """
         Convert a SpecialEventRecord to a dictionary suitable for database insertion.

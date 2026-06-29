@@ -18,7 +18,7 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         session: Session,
         records: list[HistoryLogRecord],
         device_id: int,
-        source_file_id: int | None = None,
+        source_file_id: int,
     ) -> int:
         """
         Batch-upsert history log records into the database. Returns the number of records successfully inserted.
@@ -53,7 +53,7 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         return result
 
     def _history_log_to_row(
-        self, record: HistoryLogRecord, device_id: int, source_file_id: int | None
+        self, record: HistoryLogRecord, device_id: int, source_file_id: int
     ) -> dict:
         """
         Convert a HistoryLogRecord to a dictionary suitable for database insertion.

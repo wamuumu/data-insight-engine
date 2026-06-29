@@ -45,6 +45,6 @@ class SpecialEvent(BaseModel):
     algo_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     # ── Lineage ─────────────────────────────────────────────────
-    source_file_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("file_tracker.id"), nullable=True
+    source_file_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("file_tracker.id"), nullable=False
     )
