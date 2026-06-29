@@ -31,7 +31,7 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
             self._special_event_to_row(r, device_id, source_file_id) for r in records
         ]
         result = session.execute(insert(SpecialEvent).values(rows))
-        return result.rowcount
+        return result.rowcount or 0
 
     def delete_special_events_by_file(
         self, session: Session, source_file_id: int

@@ -1,6 +1,12 @@
 from abc import ABC, abstractmethod
+from enum import StrEnum
 from pathlib import Path
-from typing import Generator
+from typing import Iterator
+
+
+class FileType(StrEnum):
+    HISTORY_LOG = "xlsx"
+    SPECIAL_EVENT = "parquet"
 
 
 class BaseFile:
@@ -12,6 +18,7 @@ class BaseFile:
         self.path = path
         self.stem = path.stem
         self.suffix = path.suffix.lower()
+        self.file_type = FileType(self.suffix.lstrip("."))
         self.size = path.stat().st_size
         self.modified_at = path.stat().st_mtime
 
@@ -25,7 +32,7 @@ class BaseCrawler(ABC):
     """
 
     @abstractmethod
-    def crawl(self) -> Generator[BaseFile, None, None]:
+    def crawl(self) -> Iterator[BaseFile]:
         """
         Crawl the source and yield BaseFile instances.
         """

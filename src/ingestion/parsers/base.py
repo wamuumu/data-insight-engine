@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Union, Iterator
+from typing import Any, Iterator
 
 
 class HistoryLogRecord:
@@ -58,7 +58,7 @@ class BaseParser(ABC):
     @abstractmethod
     def parse(
         self, file: Any
-    ) -> Union[HistoryLogStream, SpecialEventRecord]:
+    ) -> HistoryLogStream | SpecialEventRecord:
         """
         Parse the given file and yield either history log records or a special event record.
         """

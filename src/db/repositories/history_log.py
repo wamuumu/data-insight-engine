@@ -29,6 +29,17 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         rows = [self._history_log_to_row(r, device_id, source_file_id) for r in records]
         result = session.execute(insert(HistoryLog).values(rows).on_conflict_do_nothing(constraint="uq_history_log_row"))
         return result.rowcount or 0
+    
+    def get_latest_log_by_device(self, session: Session, device_id: int) -> HistoryLog | None:
+        """
+        Retrieve the latest history log record associated with a specific device.
+        """
+        return (
+            session.query(HistoryLog)
+            .filter(HistoryLog.device_id == device_id)
+            .order_by(HistoryLog.event_ts.desc())
+            .first()
+        )
 
     def delete_history_logs_by_file(self, session: Session, source_file_id: int) -> int:
         """

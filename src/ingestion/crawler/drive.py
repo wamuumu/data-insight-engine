@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Generator
+from typing import Iterator
 
 from common.constants import SUPPORTED_EXTENSIONS
 from common.logging import get_logger
@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 class DriveCrawler(BaseCrawler):
     """
     Crawler for local/network drive. Recursively searches for files with supported extensions.
-    Generator-based: yields one file at a time, safe for large directories.
+    Iterator-based: yields one file at a time, safe for large directories.
     """
 
     def __init__(self, root_path: Path):
@@ -24,7 +24,7 @@ class DriveCrawler(BaseCrawler):
             raise NotADirectoryError(f"Root path {root_path} is not a directory.")
         self.root = root_path
 
-    def crawl(self) -> Generator[BaseFile, None, None]:
+    def crawl(self) -> Iterator[BaseFile]:
         """
         Recursively crawl the root directory and yield BaseFile instances for supported files.
         """
