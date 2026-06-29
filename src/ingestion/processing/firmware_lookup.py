@@ -13,9 +13,7 @@ from common.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _build_firmware_index(
-    df: pd.DataFrame
-) -> list[tuple[int, int, int]]:
+def _build_firmware_index(df: pd.DataFrame) -> list[tuple[int, int, int]]:
     switch_events: list[tuple[int, int, int]] = []
 
     if "event_id" not in df.columns or "value" not in df.columns:
@@ -39,7 +37,7 @@ def _build_firmware_index(
 
 
 def _partition_firmware_regions(
-    switch_events: list[tuple[int, int, int]],
+    switch_events: list[tuple[int, int, int]], 
     total_rows: int
 ) -> list[tuple[int, int, int]]:
     segments: list[tuple[int, int, int]] = []
@@ -91,7 +89,7 @@ def _partition_firmware_regions(
                 last_type=last_type,
                 row_index=row_index,
                 event_id=event_id,
-                firmware_value=firmware_value
+                firmware_value=firmware_value,
             )
 
     firmware_to_use = (
@@ -104,7 +102,7 @@ def _partition_firmware_regions(
 
 
 def _create_firmware_resolver(
-    segments: list[tuple[int, int, int]]
+    segments: list[tuple[int, int, int]],
 ) -> Callable[[int], int | None]:
     starts = [s for s, _, _ in segments]
     ends = [e for _, e, _ in segments]
@@ -118,9 +116,8 @@ def _create_firmware_resolver(
 
     return lookup
 
-def build_firmware_lookup(
-    df: pd.DataFrame
-) -> Callable[[int], int | None]:
+
+def build_firmware_lookup(df: pd.DataFrame) -> Callable[[int], int | None]:
     switch_events = _build_firmware_index(df)
     segments = _partition_firmware_regions(switch_events, len(df))
     firmware_lookup = _create_firmware_resolver(segments)

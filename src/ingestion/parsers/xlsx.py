@@ -31,22 +31,30 @@ class XLSXParser(BaseParser):
         )
 
         try:
-            df = pd.read_excel(file.path, sheet_name=0, header=0, names=_COLUMNS, engine="openpyxl")
+            df = pd.read_excel(
+                file.path, sheet_name=0, header=0, names=_COLUMNS, engine="openpyxl"
+            )
         except Exception as e:
-            logger.error("Failed to read XLSX file into DataFrame", path=str(file.path), error=str(e))
+            logger.error(
+                "Failed to read XLSX file into DataFrame",
+                path=str(file.path),
+                error=str(e),
+            )
             raise
 
         df = df.dropna(how="all")  # Drop rows where all elements are NaN
 
         if df.empty:
             logger.warning("XLSX file has no data rows", path=str(file.path))
-            return HistoryLogStream(records=iter([]), rollover_detected=False, rollover_index=None)
+            return HistoryLogStream(
+                records=iter([]), rollover_detected=False, rollover_index=None
+            )
 
         logger.debug(
             "XLSX file opened successfully",
             path=str(file.path),
             num_rows=len(df),
-            columns=list(df.columns)
+            columns=list(df.columns),
         )
 
         cleaned_records, rollover_index = clean_timestamps(df)
@@ -54,7 +62,7 @@ class XLSXParser(BaseParser):
         logger.info(
             "RTC timestamps cleaning completed",
             num_cleaned_records=len(cleaned_records),
-            diff=len(cleaned_records) - len(df)
+            diff=len(cleaned_records) - len(df),
         )
 
         firmware_lookup = build_firmware_lookup(cleaned_records)
@@ -69,10 +77,9 @@ class XLSXParser(BaseParser):
                         "value": row.value,
                         "firmware_version": firmware_lookup(idx),
                     },
-                    is_rollover=row.rollover
+                    is_rollover=row.rollover,
                 )
-            
+
         return HistoryLogStream(
-            records=record_generator(),
-            rollover_index=rollover_index
+            records=record_generator(), rollover_index=rollover_index
         )

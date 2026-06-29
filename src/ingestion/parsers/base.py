@@ -10,7 +10,9 @@ class HistoryLogRecord:
 
     __slots__ = ["source_file", "data", "is_rollover"]
 
-    def __init__(self, source_file: str, data: dict[str, Any], is_rollover: bool = False):
+    def __init__(
+        self, source_file: str, data: dict[str, Any], is_rollover: bool = False
+    ):
         self.source_file = source_file
         self.data = data
         self.is_rollover = is_rollover
@@ -24,6 +26,7 @@ class HistoryLogStream:
     """
     Container for a stream of history log records, along with additional information.
     """
+
     records: Iterator[HistoryLogRecord]
     rollover_index: int | None
 
@@ -56,9 +59,7 @@ class BaseParser(ABC):
         ...
 
     @abstractmethod
-    def parse(
-        self, file: Any
-    ) -> HistoryLogStream | SpecialEventRecord:
+    def parse(self, file: Any) -> HistoryLogStream | SpecialEventRecord:
         """
         Parse the given file and yield either history log records or a special event record.
         """

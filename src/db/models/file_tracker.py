@@ -1,5 +1,4 @@
 from enum import StrEnum
-from pathlib import Path
 
 from sqlalchemy import Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -13,8 +12,10 @@ class FileStatus(StrEnum):
     DONE = "done"
     FAILED = "failed"
 
+
 # TODO: is file available? is deleted?
 # TODO: add rows_inserted field?
+
 
 class FileTracker(BaseModel):
     __tablename__ = "file_tracker"

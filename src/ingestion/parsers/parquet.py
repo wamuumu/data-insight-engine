@@ -29,6 +29,7 @@ _HEADER_MAPPING = {
     "GPS_Fix": "gps_fix",
 }
 
+
 class ParquetParser(BaseParser):
     """
     Parser for Parquet Special Event files.
@@ -62,20 +63,17 @@ class ParquetParser(BaseParser):
             "Parquet file metadata",
             path=str(file.path),
             num_rows=len(df),
-            columns=list(df.columns)
+            columns=list(df.columns),
         )
 
-        df = (
-            df.drop(columns=PARQUET_DROP_COLUMNS, errors="ignore")
-            .rename(columns=_HEADER_MAPPING)
-            [list(_HEADER_MAPPING.values())]
-        )
+        df = df.drop(columns=PARQUET_DROP_COLUMNS, errors="ignore").rename(
+            columns=_HEADER_MAPPING
+        )[list(_HEADER_MAPPING.values())]
 
         statistics = compute_event_statistics(df)
 
         logger.debug(
-            "Special event statistics computed",
-            num_statistics=len(statistics)
+            "Special event statistics computed", num_statistics=len(statistics)
         )
 
         return SpecialEventRecord(source_file=file.path, data=statistics)

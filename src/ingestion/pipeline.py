@@ -47,13 +47,13 @@ class PipelineStats:
     Tracks statistics about the ingestion pipeline execution.
     """
 
-    files_discovered: int = 0  # Total number of files discovered by the crawler in the specified root directory
-    files_parsed: int = 0  # Total number of files successfully parsed and processed
-    files_skipped: int = 0  # No parser found
-    files_deduplicated: int = 0  # Alredy processed, skipped based on identity
-    files_failed: int = 0  # Files that failed to process due to errors
-    records_produced: int = 0  # Total number of records produced by parsers
-    records_inserted: int = 0  # Total number of records successfully inserted into the database
+    files_discovered: int = 0           # Total number of files discovered by the crawler in the specified root directory
+    files_parsed: int = 0               # Total number of files successfully parsed and processed
+    files_skipped: int = 0              # No parser found
+    files_deduplicated: int = 0         # Alredy processed, skipped based on identity
+    files_failed: int = 0               # Files that failed to process due to errors
+    records_produced: int = 0           # Total number of records produced by parsers
+    records_inserted: int = 0           # Total number of records successfully inserted into the database
 
     def merge(self, other: PipelineStats):
         """
@@ -215,7 +215,6 @@ class IngestionPipeline:
 
         if not self.dry_run:
             with get_db_session(self.session_factory) as session:
-
                 # Upsert device record
                 device = self.device_repo.get_device_by_serial_number(session, sn)
                 if device is None:
@@ -231,9 +230,11 @@ class IngestionPipeline:
                         serial_number=sn,
                         device_id=device.id,
                     )
-                
+
                 if file.file_type == FileType.HISTORY_LOG:
-                    last_log = self.history_log_repo.get_latest_log_by_device(session, device.id)
+                    last_log = self.history_log_repo.get_latest_log_by_device(
+                        session, device.id
+                    )
                     prev_file_tracker_id = last_log.source_file_id if last_log else None
                     logger.debug(
                         "Retrieved latest history log for device",
@@ -242,9 +243,13 @@ class IngestionPipeline:
                         prev_file_tracker_id=prev_file_tracker_id,
                     )
 
-                file_tracker = self.file_tracker_repo.get_file_tracker_by_checksum(session, checksum)
+                file_tracker = self.file_tracker_repo.get_file_tracker_by_checksum(
+                    session, checksum
+                )
                 if file_tracker is None:
-                    file_tracker = self.file_tracker_repo.create_file_tracker(session, str(file.path), checksum)
+                    file_tracker = self.file_tracker_repo.create_file_tracker(
+                        session, str(file.path), checksum
+                    )
                     logger.debug(
                         "Created new file tracker record",
                         file_path=str(file.path),
@@ -316,9 +321,7 @@ class IngestionPipeline:
         structlog.contextvars.clear_contextvars()
         return stats
 
-    def _quarantine_file(
-        self, file_tracker_id: int, file_type: FileType, reason: str
-    ):
+    def _quarantine_file(self, file_tracker_id: int, file_type: FileType, reason: str):
         """
         Mark the file as failed and provide the reason for quarantine.
         """
@@ -328,8 +331,12 @@ class IngestionPipeline:
                 reason=reason,
             )
             return
-        
-        logger.warning("Quarantining file due to processing failure", file_tracker_id=file_tracker_id, reason=reason)
+
+        logger.warning(
+            "Quarantining file due to processing failure",
+            file_tracker_id=file_tracker_id,
+            reason=reason,
+        )
 
         try:
             with get_db_session(self.session_factory) as session:
@@ -416,14 +423,12 @@ class IngestionPipeline:
             total_produced += 1
             batch = [parsed]
 
-            total_inserted = self._persist_batch(batch, device_id, source_file_id, deadline)
-
-            return (
-                total_inserted,
-                total_produced,
-                total_inserted == total_produced
+            total_inserted = self._persist_batch(
+                batch, device_id, source_file_id, deadline
             )
-        
+
+            return (total_inserted, total_produced, total_inserted == total_produced)
+
         hl_records = parsed.records
         rollover_index = parsed.rollover_index
         rollover_detected = parsed.rollover_index is not None
@@ -431,19 +436,25 @@ class IngestionPipeline:
         current_file_id = prev_source_file_id or source_file_id
 
         for idx, record in enumerate(hl_records):
-
             is_rollover_boundary = (
-                rollover_detected and idx == rollover_index and prev_source_file_id is not None
+                rollover_detected
+                and idx == rollover_index
+                and prev_source_file_id is not None
             )
 
             if is_rollover_boundary:
                 if batch:
-                    logger.debug("Splitting batch due to rollover detection", rollover_index=idx, batch_size=len(batch), source_file_id=prev_source_file_id)
+                    logger.debug(
+                        "Splitting batch due to rollover detection",
+                        rollover_index=idx,
+                        batch_size=len(batch),
+                        source_file_id=prev_source_file_id,
+                    )
                     total_inserted += self._persist_batch(
                         batch, device_id, current_file_id, deadline
                     )
                     batch.clear()
-                
+
                 current_file_id = source_file_id
 
             total_produced += 1
@@ -467,7 +478,7 @@ class IngestionPipeline:
         batch: list[HistoryLogRecord] | list[SpecialEventRecord],
         device_id: int,
         source_file_id: int,
-        deadline: float
+        deadline: float,
     ) -> int:
         """
         Persist a batch of records to the database. If insertion fails, retry the batch for a fixed number of attempts.
@@ -492,13 +503,14 @@ class IngestionPipeline:
                     logger.debug(
                         "Batch inserted successfully.",
                         batch_size=len(batch),
-                        inserted=inserted
+                        inserted=inserted,
                     )
                     return inserted
             except Exception as e:
                 delay = min(
                     settings.db_retry_max_delay,
-                    settings.db_retry_initial_delay * (2 ** attempt),  # Exponential backoff
+                    settings.db_retry_initial_delay
+                    * (2**attempt),  # Exponential backoff
                 )
 
                 logger.warning(
@@ -511,9 +523,11 @@ class IngestionPipeline:
                 if monotonic() + delay < deadline:
                     sleep(delay)
                 else:
-                    logger.error("Cannot retry batch insertion due to deadline constraints, aborting batch.")
+                    logger.error(
+                        "Cannot retry batch insertion due to deadline constraints, aborting batch."
+                    )
                     return 0
-        
+
         logger.error("All retry attempts failed for batch insertion, aborting batch.")
         return 0
 
@@ -540,7 +554,7 @@ class IngestionPipeline:
                 batch_size=len(batch),
                 inserted=inserted,
                 device_id=device_id,
-                source_file_id=source_file_id
+                source_file_id=source_file_id,
             )
             return inserted
 
@@ -554,7 +568,7 @@ class IngestionPipeline:
                 batch_size=len(batch),
                 inserted=inserted,
                 device_id=device_id,
-                source_file_id=source_file_id
+                source_file_id=source_file_id,
             )
             return inserted
 

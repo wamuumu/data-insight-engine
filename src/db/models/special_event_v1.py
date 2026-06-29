@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, Integer, ForeignKey, SmallInteger
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    ForeignKey,
+    SmallInteger,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
@@ -9,6 +18,7 @@ _REAL = Float(precision=24)
 
 
 # TODO: add zero cross with two thresholds: first subtract the mean, then zero-cross.
+
 
 class SpecialEventAggregate(BaseModel):
     __tablename__ = "special_event_aggregate"

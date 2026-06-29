@@ -53,7 +53,7 @@ def upgrade():
             "event_ts",
             "event_id",
             name="uq_history_log_row",
-        )
+        ),
     )
 
     # ── SpecialEvent ───────────────────────────────────────
