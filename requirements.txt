@@ -1,23 +1,23 @@
 # Data processing
-pandas
-pyarrow
-openpyxl
-scipy
+pandas==3.0.3
+pyarrow==24.0.0
+openpyxl==3.1.5
+scipy==1.18.0
 
 # Database
-sqlalchemy
-psycopg2-binary
-alembic
+sqlalchemy==2.0.51
+psycopg2-binary==2.9.12
+alembic==1.18.5
 
 # Settings and validation
-pydantic
-pydantic-settings
+pydantic==2.13.4
+pydantic-settings==2.14.2
 
 # Scheduling
-apscheduler
+apscheduler==3.11.3
 
 # Monitoring
-prometheus-client
+prometheus-client==0.25.0
 
 # Structured logging
-structlog
+structlog==26.1.0
