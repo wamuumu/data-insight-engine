@@ -11,7 +11,7 @@ _settings = load_settings()
 
 _PARSER_FACTORIES: list = [
     lambda: XLSXParser(),
-    lambda: ParquetParser(batch_size=_settings.parquet_batch_size),
+    lambda: ParquetParser(),
 ]
 
 
