@@ -517,7 +517,7 @@ def _validate_stage(df: pd.DataFrame) -> bool:
     return True
 
 
-def _rollover_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
+def _rollover_stage(df: pd.DataFrame, sorted_df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
     first_real = (
         df[df["counter"] >= 0].iloc[0] if not df[df["counter"] >= 0].empty else None
     )
@@ -529,25 +529,25 @@ def _rollover_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
         first_counter = first_real["counter"]
 
         mask = (
-            (df["datetime"] == first_dt)
-            & (df["counter"] == first_counter)
-            & (df["counter"] >= 0)
+            (sorted_df["datetime"] == first_dt)
+            & (sorted_df["counter"] == first_counter)
+            & (sorted_df["counter"] >= 0)
         )
-        idxs = df.index[mask]
+        idxs = sorted_df.index[mask]
         rollover_idx = int(idxs[0]) if len(idxs) > 0 and idxs[0] > 0 else None
 
-    df["rollover"] = False
+    sorted_df["rollover"] = False
 
     if rollover_idx is not None:
         logger.info(
             "Detected rollover in logs, marking rows after rollover index.",
             rollover_index=rollover_idx,
         )
-        df.loc[rollover_idx:, "rollover"] = True
+        sorted_df.loc[rollover_idx:, "rollover"] = True
     else:
         logger.debug("No rollover detected in logs.")
 
-    return df, rollover_idx
+    return sorted_df, rollover_idx
 
 
 def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None]:
@@ -565,6 +565,6 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None]
     if not _validate_stage(sorted_df):
         return None, None
 
-    sorted_df, rollover_idx = _rollover_stage(sorted_df)
+    sorted_df, rollover_idx = _rollover_stage(df, sorted_df)
 
     return sorted_df, rollover_idx
