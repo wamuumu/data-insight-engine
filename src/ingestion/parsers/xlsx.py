@@ -47,7 +47,7 @@ class XLSXParser(BaseParser):
         if df.empty:
             logger.warning("XLSX file has no data rows", path=str(file.path))
             return HistoryLogStream(
-                records=iter([]), rollover_detected=False, rollover_index=None
+                records=iter([]), rollover_index=None
             )
 
         logger.debug(
@@ -58,6 +58,15 @@ class XLSXParser(BaseParser):
         )
 
         cleaned_records, rollover_index = clean_timestamps(df)
+
+        if cleaned_records is None:
+            logger.warning(
+                "Timestamp cleaning failed, returning empty record stream",
+                path=str(file.path),
+            )
+            return HistoryLogStream(
+                records=iter([]), rollover_index=None
+            )
 
         logger.info(
             "RTC timestamps cleaning completed",

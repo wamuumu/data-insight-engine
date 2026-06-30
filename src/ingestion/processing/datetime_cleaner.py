@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from datetime import datetime, timedelta
-from typing import NamedTuple
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -19,17 +19,25 @@ from common.logging import get_logger
 logger = get_logger(__name__)
 
 
-class Window(NamedTuple):
+@dataclass
+class Window:
     """A contiguous slice of logs identifying the timestamps that need to be shifted by some delta."""
 
     start_idx: int
     start_dt: datetime
     end_idx: int
     end_dt: datetime
-    rtc_anchor_idx: int
-    rtc_anchor_dt: datetime
+    rtc_anchor_idx: int | None
+    rtc_anchor_dt: datetime | None
     is_guessed: bool = False
 
+    @property
+    def is_epoch(self) -> bool:
+        return self.start_dt.year == EPOCH_YEAR
+    
+    @property
+    def is_epoch_start(self) -> bool:
+        return self.start_dt == datetime(EPOCH_YEAR, 1, 1, 0, 0, 0, 0)
 
 # --- Helpers for timestamp cleaning and alignment ---
 
@@ -89,11 +97,8 @@ def _detect_windows(df: pd.DataFrame) -> list[Window]:
                 start_idx = j
                 start_dt = dt
                 break
-
-            if dt.year == EPOCH_YEAR:
-                continue
-
-            if dt.date() != end_dt.date():
+            
+            if dt.year != EPOCH_YEAR:
                 start_idx = j + 1
                 start_dt = df.at[start_idx, "datetime"]
                 break
@@ -140,12 +145,8 @@ def _merge_overlapping_windows(df: pd.DataFrame, windows: list[Window]) -> list[
         last_win = merged[-1]
 
         if win.start_idx <= last_win.end_idx:
-            last_win_is_epoch = last_win.start_dt == datetime(
-                EPOCH_YEAR, 1, 1, 0, 0, 0, 0
-            )
-            current_win_is_epoch = win.start_dt == datetime(
-                EPOCH_YEAR, 1, 1, 0, 0, 0, 0
-            )
+            last_win_is_epoch = last_win.is_epoch_start
+            current_win_is_epoch = win.is_epoch_start
 
             if last_win_is_epoch and current_win_is_epoch:
                 # Keep consecutive epoch windows separate so guessing works correctly
@@ -196,8 +197,8 @@ def _merge_overlapping_windows(df: pd.DataFrame, windows: list[Window]) -> list[
                 end_idx=block_end_idx,
                 start_dt=df.at[i, "datetime"],
                 end_dt=df.at[block_end_idx, "datetime"],
-                rtc_anchor_idx=-1,
-                rtc_anchor_dt=datetime.min,
+                rtc_anchor_idx=None,
+                rtc_anchor_dt=None,
                 is_guessed=True,
             )
         )
@@ -215,7 +216,17 @@ def _merge_overlapping_windows(df: pd.DataFrame, windows: list[Window]) -> list[
 def _shift_window(df: pd.DataFrame, window: Window):
     """Shift every row in [window.start_idx, window.end_idx] by the delta
     computed from the distance between the window's last row and its RTC anchor."""
-    delta = window.rtc_anchor_dt - df.at[window.end_idx, "datetime"]
+    anchor_dt = window.rtc_anchor_dt
+    last_dt = df.at[window.end_idx, "datetime"]
+
+    if anchor_dt < last_dt:
+        logger.warning(
+            "RTC anchor is earlier than last row in window, skipping shift.",
+            window=window,
+        )
+        return
+    
+    delta = anchor_dt - last_dt
 
     for i in range(window.start_idx, window.end_idx + 1):
         df.at[i, "datetime"] = df.at[i, "datetime"] + delta
@@ -382,13 +393,13 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
     while i < len(windows):
         win = windows[i]
 
-        if win.start_dt.year == EPOCH_YEAR:
+        if win.is_epoch:
             run: list[Window] = [win]
             j = i + 1
 
             while (
                 j < len(windows)
-                and windows[j].start_dt.year == EPOCH_YEAR
+                and windows[j].is_epoch
                 and windows[j].start_idx == windows[j - 1].end_idx + 1
             ):
                 run.append(windows[j])
@@ -396,7 +407,7 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
 
             # single epoch window
             if len(run) == 1:
-                if win.rtc_anchor_idx == -1:
+                if win.rtc_anchor_idx is None:
                     logger.warning(
                         "Detected single epoch window without RTC anchor, skipping correction.",
                         window=win,
@@ -417,7 +428,7 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 # Multiple consecutive epoch windows — apply guessing
                 anchor = next(
-                    (w for w in reversed(run) if w.rtc_anchor_idx != -1), None
+                    (w for w in reversed(run) if w.rtc_anchor_idx is not None), None
                 )
 
                 if anchor:
@@ -444,9 +455,7 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
                             start_dt=w.start_dt,
                             end_idx=w.end_idx + offset,
                             end_dt=w.end_dt,
-                            rtc_anchor_idx=w.rtc_anchor_idx + offset
-                            if w.rtc_anchor_idx != -1
-                            else -1,
+                            rtc_anchor_idx=w.rtc_anchor_idx + offset if w.rtc_anchor_idx is not None else None,
                             rtc_anchor_dt=w.rtc_anchor_dt,
                             is_guessed=w.is_guessed,
                         )
@@ -481,11 +490,34 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _validate_stage(df: pd.DataFrame) -> bool:
+    """
+    Validate that the DataFrame has no backward jumps in timestamps and that
+    all epoch-year timestamps are covered by a window.
+    """
+    remaining_epoch = df[df["datetime"].dt.year == EPOCH_YEAR]
+
+    if not remaining_epoch.empty:
+        logger.error(
+            "Validation failed: uncovered epoch-year timestamps remain.",
+            uncovered_rows=remaining_epoch,
+        )
+        return False
+    
+    backward_jumps = df[df["datetime"].diff() < timedelta(0)]
+
+    if not backward_jumps.empty:
+        logger.error(
+            "Validation failed: backward jumps in timestamps detected.",
+            backward_jump_rows=backward_jumps,
+        )
+        return False
+    
+    logger.info("Validation passed successfully.")
+    return True
+
+
 def _rollover_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
-    key_cols = ["datetime", "counter"]
-
-    sorted_df = df.sort_values(key_cols).reset_index(drop=True)
-
     first_real = (
         df[df["counter"] >= 0].iloc[0] if not df[df["counter"] >= 0].empty else None
     )
@@ -497,28 +529,28 @@ def _rollover_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
         first_counter = first_real["counter"]
 
         mask = (
-            (sorted_df["datetime"] == first_dt)
-            & (sorted_df["counter"] == first_counter)
-            & (sorted_df["counter"] >= 0)
+            (df["datetime"] == first_dt)
+            & (df["counter"] == first_counter)
+            & (df["counter"] >= 0)
         )
-        idxs = sorted_df.index[mask]
+        idxs = df.index[mask]
         rollover_idx = int(idxs[0]) if len(idxs) > 0 and idxs[0] > 0 else None
 
-    sorted_df["rollover"] = False
+    df["rollover"] = False
 
     if rollover_idx is not None:
         logger.info(
             "Detected rollover in logs, marking rows after rollover index.",
             rollover_index=rollover_idx,
         )
-        sorted_df.loc[rollover_idx:, "rollover"] = True
+        df.loc[rollover_idx:, "rollover"] = True
     else:
         logger.debug("No rollover detected in logs.")
 
-    return sorted_df, rollover_idx
+    return df, rollover_idx
 
 
-def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
+def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None]:
 
     if df.empty:
         return df.copy(), None
@@ -526,7 +558,13 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
     df = _parse_stage(df)
     df = _normalize_stage(df)
     df = _align_stage(df)
+    
+    # Sort the dataframe
+    sorted_df = df.sort_values(by=["datetime", "counter"]).reset_index(drop=True)
 
-    df, rollover_idx = _rollover_stage(df)
+    if not _validate_stage(sorted_df):
+        return None, None
 
-    return df, rollover_idx
+    sorted_df, rollover_idx = _rollover_stage(sorted_df)
+
+    return sorted_df, rollover_idx

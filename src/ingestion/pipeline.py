@@ -434,51 +434,54 @@ class IngestionPipeline:
                 batch, device_id, source_file_id, deadline
             )
 
-            return (total_inserted, total_produced, total_inserted == total_produced)
+        else:
+            hl_records = parsed.records
+            rollover_index = parsed.rollover_index
+            rollover_detected = parsed.rollover_index is not None
 
-        hl_records = parsed.records
-        rollover_index = parsed.rollover_index
-        rollover_detected = parsed.rollover_index is not None
+            if not hl_records:
+                logger.warning("No records produced by parser.", file_path=str(file.path))
+                return (0, 0, False)
 
-        current_file_id = prev_source_file_id or source_file_id
+            current_file_id = prev_source_file_id or source_file_id
 
-        for idx, record in enumerate(hl_records):
-            is_rollover_boundary = (
-                rollover_detected
-                and idx == rollover_index
-                and prev_source_file_id is not None
-            )
+            for idx, record in enumerate(hl_records):
+                is_rollover_boundary = (
+                    rollover_detected
+                    and idx == rollover_index
+                    and prev_source_file_id is not None
+                )
 
-            if is_rollover_boundary:
-                if batch:
-                    logger.debug(
-                        "Splitting batch due to rollover detection",
-                        rollover_index=idx,
-                        batch_size=len(batch),
-                        source_file_id=prev_source_file_id,
-                    )
+                if is_rollover_boundary:
+                    if batch:
+                        logger.debug(
+                            "Splitting batch due to rollover detection",
+                            rollover_index=idx,
+                            batch_size=len(batch),
+                            source_file_id=prev_source_file_id,
+                        )
+                        total_inserted += self._persist_batch(
+                            batch, device_id, current_file_id, deadline
+                        )
+                        batch.clear()
+
+                    current_file_id = source_file_id
+
+                total_produced += 1
+                batch.append(record)
+
+                if len(batch) >= settings.db_batch_size:
                     total_inserted += self._persist_batch(
                         batch, device_id, current_file_id, deadline
                     )
                     batch.clear()
 
-                current_file_id = source_file_id
-
-            total_produced += 1
-            batch.append(record)
-
-            if len(batch) >= settings.db_batch_size:
+            if batch:
                 total_inserted += self._persist_batch(
                     batch, device_id, current_file_id, deadline
                 )
-                batch.clear()
 
-        if batch:
-            total_inserted += self._persist_batch(
-                batch, device_id, current_file_id, deadline
-            )
-
-        return total_inserted, total_produced, total_inserted == total_produced
+        return (total_inserted, total_produced, total_inserted == total_produced)
 
     def _persist_batch(
         self,
