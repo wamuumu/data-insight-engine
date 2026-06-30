@@ -1,6 +1,7 @@
+from datetime import date
 from enum import StrEnum
 
-from sqlalchemy import Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Integer, LargeBinary, String, Text, Date, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
@@ -27,6 +28,7 @@ class FileTracker(BaseModel):
 
     # ── Identity ──────────────────────────────────────────────
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
+    date: Mapped[date | None] = mapped_column(Date, nullable=True)
     checksum_sha256: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
 
     # ── Processing ────────────────────────────────────────────

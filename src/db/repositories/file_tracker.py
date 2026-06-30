@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -35,7 +37,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         return result
 
     def create_file_tracker(
-        self, session: Session, file_path: str, checksum_sha256: bytes
+        self, session: Session, file_path: str, checksum_sha256: bytes, date: date | None = None
     ) -> FileTracker:
         """
         Insert a new FileTracker record into the database with status 'pending' and return the created record.
@@ -44,6 +46,7 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
             insert(FileTracker)
             .values(
                 file_path=file_path,
+                date=date,
                 checksum_sha256=checksum_sha256,
                 status=FileStatus.PENDING,
             )

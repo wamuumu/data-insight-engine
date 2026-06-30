@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from common.logging import get_logger
-from common.utils import compute_sha256, extract_serial_number
+from common.utils import compute_sha256, extract_serial_number, extract_date
 from config import load_settings
 from db.models.file_tracker import FileTracker, FileStatus
 from db.repositories.device import DeviceRepository
@@ -191,6 +191,13 @@ class IngestionPipeline:
             )
             stats.files_failed += 1
             return stats
+        
+        date = extract_date(file.path)
+        if date is None:
+            logger.warning(
+                "Could not extract date from file path, proceeding without date context",
+                file_path=str(file.path),
+            )
 
         checksum = compute_sha256(file.path)
         if checksum is None:
@@ -248,7 +255,7 @@ class IngestionPipeline:
                 )
                 if file_tracker is None:
                     file_tracker = self.file_tracker_repo.create_file_tracker(
-                        session, str(file.path), checksum
+                        session, str(file.path), checksum, date
                     )
                     logger.debug(
                         "Created new file tracker record",

@@ -24,6 +24,7 @@ def upgrade():
         "file_tracker",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("file_path", sa.Text(), nullable=False),
+        sa.Column("date", sa.Date(), nullable=True),
         sa.Column("checksum_sha256", BYTEA(), nullable=False),
         sa.Column("status", sa.String(16), nullable=False, server_default="pending"),
         sa.PrimaryKeyConstraint("id"),

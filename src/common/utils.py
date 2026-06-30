@@ -1,7 +1,7 @@
 import re
 import hashlib
 from pathlib import Path
-from datetime import datetime, time, timezone
+from datetime import datetime, date, time, timezone
 
 
 def extract_serial_number(path: Path) -> str | None:
@@ -12,6 +12,22 @@ def extract_serial_number(path: Path) -> str | None:
     _SN_PATTERN = re.compile(r"(B[0-9A-F]{8})")
     match = _SN_PATTERN.search(str(path))
     return match.group() if match else None
+
+
+def extract_date(path: Path) -> date | None:
+    """
+    Extract the date from the file path using a regex pattern.
+    """
+    _DATE_PATTERN = re.compile(r"(?P<ymd>\d{4}-\d{2}-\d{2})|(?P<dmy>\d{2}-\d{2}-\d{2})")
+    match = _DATE_PATTERN.search(str(path))
+    
+    if not match:
+        return None
+
+    if match.group("ymd"):
+        return datetime.strptime(match.group("ymd"), "%Y-%m-%d").date()
+
+    return datetime.strptime(match.group("dmy"), "%d-%m-%y").date()
 
 
 def compute_sha256(path: Path) -> bytes | None:
