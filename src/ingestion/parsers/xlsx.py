@@ -57,7 +57,7 @@ class XLSXParser(BaseParser):
             columns=list(df.columns),
         )
 
-        cleaned_records, rollover_index = clean_timestamps(df)
+        cleaned_records, rollover_index, inserted_count,dropped_count = clean_timestamps(df)
 
         if cleaned_records is None:
             logger.warning(
@@ -70,8 +70,10 @@ class XLSXParser(BaseParser):
 
         logger.info(
             "RTC timestamps cleaning completed",
+            num_original_records=len(df),
             num_cleaned_records=len(cleaned_records),
-            diff=len(cleaned_records) - len(df),
+            inserted_count=inserted_count,
+            dropped_count=dropped_count,
         )
 
         firmware_lookup = build_firmware_lookup(cleaned_records)

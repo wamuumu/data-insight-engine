@@ -490,7 +490,7 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _validate_stage(df: pd.DataFrame) -> bool:
+def _validate_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     """
     Validate that the DataFrame has no backward jumps in timestamps and that
     all epoch-year timestamps are covered by a window.
@@ -498,11 +498,13 @@ def _validate_stage(df: pd.DataFrame) -> bool:
     remaining_epoch = df[df["datetime"].dt.year == EPOCH_YEAR]
 
     if not remaining_epoch.empty:
-        logger.error(
-            "Validation failed: uncovered epoch-year timestamps remain.",
-            uncovered_rows=remaining_epoch,
+        dropped_count = len(remaining_epoch)
+        logger.warning(
+            "Dropping unresolved epoch-year rows (no RTC_SET event found).",
+            dropped_count=dropped_count,
+            dropped_rows=remaining_epoch
         )
-        return False
+        df = df[df["datetime"].dt.year != EPOCH_YEAR].reset_index(drop=True)
     
     backward_jumps = df[df["datetime"].diff() < timedelta(0)]
 
@@ -511,10 +513,10 @@ def _validate_stage(df: pd.DataFrame) -> bool:
             "Validation failed: backward jumps in timestamps detected.",
             backward_jump_rows=backward_jumps,
         )
-        return False
+        return df, False
     
     logger.info("Validation passed successfully.")
-    return True
+    return df, True
 
 
 def _rollover_stage(df: pd.DataFrame, sorted_df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
@@ -550,10 +552,12 @@ def _rollover_stage(df: pd.DataFrame, sorted_df: pd.DataFrame) -> tuple[pd.DataF
     return sorted_df, rollover_idx
 
 
-def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None]:
+def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None, int, int]:
 
     if df.empty:
-        return df.copy(), None
+        return df.copy(), None, 0, 0
+
+    initial_len = len(df)
 
     df = _parse_stage(df)
     df = _normalize_stage(df)
@@ -561,10 +565,16 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None]
     
     # Sort the dataframe
     sorted_df = df.sort_values(by=["datetime", "counter"]).reset_index(drop=True)
+    pre_validation_len = len(sorted_df)
 
-    if not _validate_stage(sorted_df):
-        return None, None
+    sorted_df, is_valid = _validate_stage(sorted_df)
+
+    if not is_valid:
+        return None, None, 0, 0
+    
+    inserted_count = pre_validation_len - initial_len
+    dropped_count = pre_validation_len - len(sorted_df)
 
     sorted_df, rollover_idx = _rollover_stage(df, sorted_df)
 
-    return sorted_df, rollover_idx
+    return sorted_df, rollover_idx, inserted_count, dropped_count
