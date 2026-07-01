@@ -502,7 +502,6 @@ def _validate_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
         logger.warning(
             "Dropping unresolved epoch-year rows (no RTC_SET event found).",
             dropped_count=dropped_count,
-            dropped_rows=remaining_epoch
         )
         df = df[df["datetime"].dt.year != EPOCH_YEAR].reset_index(drop=True)
     

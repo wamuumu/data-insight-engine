@@ -34,3 +34,30 @@ SELECT
     pg_size_pretty(pg_indexes_size('history_log')) AS indexes_size,
     pg_size_pretty(pg_total_relation_size('history_log')) AS total_size;
 
+
+Discussion 01/07/2026:
+
+    - 1st phase: rollover detection -> get HL Download most recent (cannot be 01/01/2000) -> sort rows with HL Download at end
+
+    - 2nd phase: 
+        - detect windows of invalid sessions. If multiple, consecutive and monotonic treat them as a single window, otherwise separate them.
+        - correct timestamps of the logs with unknown timestamps (i.e., 01/01/2000), leaving the other untouched
+        - backward and forward correction of timestamps if multiple consecutive invalid session are detected
+            - correct first window, guess the others (in both directions)
+            - all the guessed windows are wrapped inside two sentinel logs (START GUESSING DATA and END GUESSING DATA). 
+                START GUESSING DATA gets the timestamp of the last valid log before the missing data, and END GUESSING DATA 
+                gets the timestamp of the first valid log after the missing data
+            - if the counter starts not from 0, then a missing ON message is detected, and we add MISSING LOGS (with value = # of missing logs)
+            - all logs in between the two sentinel logs keep the 01/01/2000 timestamp
+            - after the correction, we can calculate the TSS+C for each session:
+                - added TSS + C field (unsigned bigint) to history_log table
+                - for each session (start, stop), each row gets TSS + C = start_ts (millis from 01/01/2022) + counter
+                - TSS + C can be used as a primary way to order the logs in the db
+                - using TSS + C, we can save logs as they are, and adjust only the timestamps of bogus windows
+    
+    - 3rd phase:
+        - Update DB schema: add TSS+C (bigint) and REAL_TS (bool) fields. REAL_TS is true if the timestamp is unchanged from raw, false otherwise. It must 
+          be set to true for the sentinel logs (START MISSING DATA and END MISSING DATA), and also for the 01/01/2000 in between
+        - upsert the logs into the db with ON CONFLICT DO NOTHING strategy (check uniqueness using device_id and TSS+C)
+            
+
