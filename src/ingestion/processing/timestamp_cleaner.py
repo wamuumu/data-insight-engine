@@ -616,6 +616,16 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None,
 
     is_rollover, rollover_head_idx = _detect_rollover(df)
 
+    if is_rollover:
+        logger.info("Traslating dataframe to account for rollover.", rollover_head_index=rollover_head_idx)
+        df =pd.concat(
+            [
+                df.iloc[rollover_head_idx + 1:],
+                df.iloc[:rollover_head_idx + 1],
+            ],
+            ignore_index=True,
+        )
+
     df = _normalize_stage(df)
     df = _align_stage(df)
     
