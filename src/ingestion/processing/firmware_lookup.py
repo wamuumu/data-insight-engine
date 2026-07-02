@@ -3,14 +3,13 @@ from typing import Callable
 
 import pandas as pd
 
-from common.constants import (
-    SWITCH_ON_EVENT_ID,
-    SWITCH_OFF_EVENT_ID,
-    UNDEFINED_FIRMWARE_VERSION,
-)
+from common.constants import EventID
 from common.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+_UNDEFINED_FIRMWARE_VERSION = -1  # Sentinel value for undefined firmware version
 
 
 def _build_firmware_index(df: pd.DataFrame) -> list[tuple[int, int, int]]:
@@ -30,7 +29,7 @@ def _build_firmware_index(df: pd.DataFrame) -> list[tuple[int, int, int]]:
         except (ValueError, TypeError):
             continue
 
-        if event_id in (SWITCH_ON_EVENT_ID, SWITCH_OFF_EVENT_ID):
+        if event_id in (EventID.SWITCH_ON, EventID.SWITCH_OFF):
             switch_events.append((abs_row_index, event_id, firmware_value))
 
     return switch_events
@@ -51,37 +50,37 @@ def _partition_firmware_regions(
 
     for row_index, event_id, firmware_value in switch_events:
         if last_type is None:
-            if event_id == SWITCH_OFF_EVENT_ID:
+            if event_id == EventID.SWITCH_OFF:
                 close_segment(row_index, firmware_value)
                 pending_start = row_index + 1
-                last_type = SWITCH_OFF_EVENT_ID
+                last_type = EventID.SWITCH_OFF
                 last_firmware = firmware_value
             else:
                 pending_start = row_index
-                last_type = SWITCH_ON_EVENT_ID
+                last_type = EventID.SWITCH_ON
                 last_firmware = firmware_value
-        elif last_type == SWITCH_ON_EVENT_ID:
-            if event_id == SWITCH_OFF_EVENT_ID:
+        elif last_type == EventID.SWITCH_ON:
+            if event_id == EventID.SWITCH_OFF:
                 close_segment(row_index, last_firmware)
                 pending_start = row_index + 1
-                last_type = SWITCH_OFF_EVENT_ID
+                last_type = EventID.SWITCH_OFF
                 last_firmware = firmware_value
             else:
                 if row_index - 1 >= pending_start:
                     segments.append((pending_start, row_index - 1, last_firmware))
                 pending_start = row_index
-                last_type = SWITCH_ON_EVENT_ID
+                last_type = EventID.SWITCH_ON
                 last_firmware = firmware_value
-        elif last_type == SWITCH_OFF_EVENT_ID:
-            if event_id == SWITCH_ON_EVENT_ID:
+        elif last_type == EventID.SWITCH_OFF:
+            if event_id == EventID.SWITCH_ON:
                 pending_start = row_index
-                last_type = SWITCH_ON_EVENT_ID
+                last_type = EventID.SWITCH_ON
                 last_firmware = firmware_value
             else:
                 if row_index >= pending_start:
                     segments.append((pending_start, row_index, firmware_value))
                 pending_start = row_index + 1
-                last_type = SWITCH_OFF_EVENT_ID
+                last_type = EventID.SWITCH_OFF
                 last_firmware = firmware_value
         else:
             logger.warning(
@@ -93,7 +92,7 @@ def _partition_firmware_regions(
             )
 
     firmware_to_use = (
-        last_firmware if last_firmware is not None else UNDEFINED_FIRMWARE_VERSION
+        last_firmware if last_firmware is not None else _UNDEFINED_FIRMWARE_VERSION
     )
     if total_rows > 0 and pending_start <= total_rows - 1:
         close_segment(total_rows - 1, firmware_to_use)
@@ -112,7 +111,7 @@ def _create_firmware_resolver(
         pos = bisect.bisect_right(starts, row_index) - 1
         if pos >= 0 and row_index <= ends[pos]:
             return firmwares[pos]
-        return UNDEFINED_FIRMWARE_VERSION
+        return _UNDEFINED_FIRMWARE_VERSION
 
     return lookup
 

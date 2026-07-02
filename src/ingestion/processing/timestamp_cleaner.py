@@ -6,18 +6,16 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from common.constants import (
-    RTC_SET_EVENT_ID,
-    RTC_RESET_EVENT_ID,
-    RTC_GUESSED_EVENT_ID,
-    SWITCH_ON_EVENT_ID,
-    HL_DOWNLOAD_EVENT_ID,
-    SENTINEL_VALUE,
-    EPOCH_YEAR,
-)
+from common.constants import EventID
 from common.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+_EPOCH_YEAR = 2000
+_SENTINEL_VALUE = 1
+_TIMEDELTA_OFFSET_SECOND = timedelta(seconds=1)
+_TIMEDELTA_OFFSET_MILLIS = timedelta(milliseconds=1)
 
 
 @dataclass
@@ -28,26 +26,29 @@ class Window:
     start_dt: datetime
     end_idx: int
     end_dt: datetime
-    rtc_anchor_idx: int | None
-    rtc_anchor_dt: datetime | None
+    rtc_anchor_idx: int | None = None
+    rtc_anchor_dt: datetime | None = None
     is_guessed: bool = False
 
     @property
     def is_epoch(self) -> bool:
-        return self.start_dt.year == EPOCH_YEAR
+        return self.start_dt.year == _EPOCH_YEAR
     
     @property
     def is_epoch_start(self) -> bool:
-        return self.start_dt == datetime(EPOCH_YEAR, 1, 1, 0, 0, 0, 0)
+        return self.start_dt == datetime(_EPOCH_YEAR, 1, 1, 0, 0, 0, 0)
 
 # --- Helpers for timestamp cleaning and alignment ---
 
 
-def _make_synthetic_row(event_id: int, value: int | str, dt: datetime) -> dict:
+def _make_synthetic_row(event_id: EventID, value: int, dt: datetime, counter: int | None = None) -> dict:
     """Build a dict for a single synthetic row (RTC_RESET or RTC_GUESSED)."""
     return {
-        "counter": -1 if event_id == RTC_RESET_EVENT_ID else -2,
+        "counter": counter,
+        "date": dt.date().strftime("%d/%m/%Y"),
+        "time": dt.time().strftime("%H:%M:%S.%f")[:-3],
         "event_id": event_id,
+        "description": event_id.name.replace("_", " "),
         "value": value,
         "datetime": dt,
     }
@@ -70,12 +71,68 @@ def _insert_row(df: pd.DataFrame, index: int, row: dict) -> pd.DataFrame:
 
 
 def _detect_windows(df: pd.DataFrame) -> list[Window]:
+    """
+    Detect contiguous windows of invalid epoch-year logs.
+
+    Args:
+        df: DataFrame containing the log records.
+    
+    Returns:
+        A list of Window objects representing the detected windows.
+    """
+    windows: list[Window] = []
+
+    start_idx: int | None = None
+    end_idx: int | None = None
+    start_dt: datetime | None = None
+    end_dt: datetime | None = None
+
+    #TODO: check this logic
+
+    i = 0
+    while i < len(df):
+        if df.at[i, "event_id"] == EventID.RTC_SET:
+            last_win = windows[-1] if windows else None
+            if last_win and last_win.end_idx >= i and last_win.rtc_anchor_idx is None:
+                last_win.rtc_anchor_idx = i
+                last_win.rtc_anchor_dt = df.at[i, "datetime"]    
+
+        if df.at[i, "datetime"].year != _EPOCH_YEAR:
+            i += 1
+            continue
+        
+        start_idx = i
+        start_dt = df.at[i, "datetime"]
+        
+        end_idx = i
+        while (
+            end_idx + 1 < len(df)
+            and df.at[end_idx + 1, "datetime"].year == _EPOCH_YEAR
+            and df.at[end_idx + 1, "event_id"] != EventID.RTC_RESET
+        ):
+            end_idx += 1
+            end_dt = df.at[end_idx, "datetime"]
+        
+        windows.append(
+            Window(
+                start_idx=start_idx,
+                end_idx=end_idx,
+                start_dt=start_dt,
+                end_dt=end_dt
+            )
+        )
+        i = end_idx + 1
+        
+
+            
+
+def _detect_windows(df: pd.DataFrame) -> list[Window]:
     windows: list[Window] = []
 
     for i in range(len(df)):
         row = df.iloc[i]
 
-        if row["event_id"] != RTC_SET_EVENT_ID:
+        if row["event_id"] != EventID.RTC_SET:
             continue
 
         rtc_idx = i
@@ -94,12 +151,12 @@ def _detect_windows(df: pd.DataFrame) -> list[Window]:
                 end_dt = dt
                 continue
 
-            if df.at[j, "event_id"] == RTC_RESET_EVENT_ID:
+            if df.at[j, "event_id"] == EventID.RTC_RESET:
                 start_idx = j
                 start_dt = dt
                 break
             
-            if dt.year != EPOCH_YEAR:
+            if dt.year != _EPOCH_YEAR:
                 start_idx = j + 1
                 start_dt = df.at[start_idx, "datetime"]
                 break
@@ -172,7 +229,7 @@ def _merge_overlapping_windows(df: pd.DataFrame, windows: list[Window]) -> list[
     uncovered: list[Window] = []
 
     for i in range(len(df)):
-        if df.at[i, "event_id"] != RTC_RESET_EVENT_ID:
+        if df.at[i, "event_id"] != EventID.RTC_RESET:
             continue
 
         already_covered = any(win.start_idx <= i <= win.end_idx for win in merged)
@@ -183,8 +240,8 @@ def _merge_overlapping_windows(df: pd.DataFrame, windows: list[Window]) -> list[
         block_end_idx = i
         for j in range(i + 1, len(df)):
             if (
-                df.at[j, "event_id"] == RTC_RESET_EVENT_ID
-                or df.at[j, "datetime"].year != EPOCH_YEAR
+                df.at[j, "event_id"] == EventID.RTC_RESET
+                or df.at[j, "datetime"].year != _EPOCH_YEAR
             ):
                 block_end_idx = j - 1
                 break
@@ -262,7 +319,7 @@ def _guess_epoch_windows(
         # Find the first non-RTC_RESET timestamp in the next window
         guessed_anchor_dt = None
         for row_idx in range(next_start, next_end + 1):
-            if df.at[row_idx, "event_id"] == RTC_RESET_EVENT_ID:
+            if df.at[row_idx, "event_id"] == EventID.RTC_RESET:
                 continue
 
             guessed_anchor_dt = df.at[row_idx, "datetime"]
@@ -290,7 +347,7 @@ def _guess_epoch_windows(
         )
 
         guessed_row = _make_synthetic_row(
-            RTC_GUESSED_EVENT_ID,
+            EventID.GUESS_DATA,
             guess_depth,
             guessed_anchor_dt,
         )
@@ -310,6 +367,39 @@ def _guess_epoch_windows(
 
 
 # --- Timestamp cleaning and alignment stages ---
+def _rollover_stage(df: pd.DataFrame) -> tuple[bool | None, int | None]:
+    """
+    Detect whether a rollover has occurred by identifying the HL Download event.
+
+    Args:
+        df: DataFrame containing the log records.
+
+    Returns:
+        A tuple ``(rollover_detected, rollover_head_index)``, where
+        ``rollover_detected`` is ``True`` if a rollover is detected, and
+        ``rollover_head_index`` is the index of the rollover head or ``None``
+        if no rollover is detected.
+    """
+
+    hl_download_rows = df[df["event_id"] == EventID.HL_DOWNLOAD]
+
+    if hl_download_rows.empty:
+        logger.error("No HL Download event found in logs, impossible state.")
+        return None, None
+    
+    if hl_download_rows["datetime"].dt.year.eq(_EPOCH_YEAR).any():
+        logger.warning("Detected HL Download event with epoch-year timestamp, skipping rollover detection.")
+        return None, None
+
+    sorted_hl_download_rows = hl_download_rows.sort_values(by="datetime", ascending=False)
+    most_recent_row = sorted_hl_download_rows.index[0]
+    next_row = df.iloc[most_recent_row + 1] if most_recent_row + 1 < len(df) else None
+
+    if next_row is None:
+        logger.debug("HL Download event is the last row, no rollover detected.")
+        return False, None
+    
+    return True, most_recent_row
 
 
 def _parse_datetime_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
@@ -341,55 +431,54 @@ def _parse_datetime_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
 
 
 def _normalize_stage(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Detect backward jumps in timestamps and counter discontinuities, and insert synthetic events to normalize the DataFrame.
+
+    Args:
+        df: DataFrame containing the log records.
+    
+    Returns:
+        A new DataFrame with synthetic events inserted to normalize the timestamps and counters.
+    """
     i = 1
 
     while i < len(df):
-        prev_dt = df.at[i - 1, "datetime"]
-        curr_dt = df.at[i, "datetime"]
-
-        # --- epoch detection ---
-        if curr_dt == datetime(EPOCH_YEAR, 1, 1, 0, 0, 0, 0):
-            logger.info(
-                "Detected epoch timestamp, inserting synthetic RTC_RESET event.",
-                index=i,
-            )
-            reset = _make_synthetic_row(RTC_RESET_EVENT_ID, SENTINEL_VALUE, curr_dt)
-            df = _insert_row(df, i, reset)
-            i += 2
-            continue
-
-        # --- backward jump within epoch ---
+        prev = df.iloc[i - 1]
+        curr = df.iloc[i]
+        
+        # --- epoch normalization ---
         if (
-            prev_dt.year == EPOCH_YEAR
-            and curr_dt.year == EPOCH_YEAR
-            and curr_dt < prev_dt
-            and (prev_dt - curr_dt) > timedelta(seconds=1)
-        ):
-            logger.info(
-                "Detected backward jump within epoch, inserting synthetic RTC_RESET event.",
-                index=i,
-            )
-            reset = _make_synthetic_row(RTC_RESET_EVENT_ID, SENTINEL_VALUE, curr_dt)
-            df = _insert_row(df, i, reset)
-            i += 2
-            continue
+            prev.datetime.year == _EPOCH_YEAR 
+            and curr.datetime.year == _EPOCH_YEAR 
+            and curr.datetime < prev.datetime
+        ): 
 
-        # --- SWITCH_ON correction ---
-        if (
-            curr_dt.replace(microsecond=0) == prev_dt.replace(microsecond=0)
-            and curr_dt < prev_dt
-        ):
-            if df.at[i, "event_id"] == SWITCH_ON_EVENT_ID:
-                logger.debug(
-                    "Detected SWITCH_ON event with backward timestamp, adjusting.",
+            # --- backward jump within epoch ---
+            if (prev.datetime - curr.datetime) > _TIMEDELTA_OFFSET_SECOND:
+                logger.info(
+                    "Detected backward jump within epoch, inserting synthetic RTC_RESET event.",
                     index=i,
                 )
-                df.at[i, "datetime"] = prev_dt + timedelta(milliseconds=1)
-            else:
-                logger.warning(
-                    "Detected backward timestamp without SWITCH_ON event, skipping correction.",
-                    index=i,
-                )
+                reset = _make_synthetic_row(EventID.RTC_RESET, _SENTINEL_VALUE, curr.datetime - _TIMEDELTA_OFFSET_MILLIS)
+                df = _insert_row(df, i, reset)
+                i += 2
+                continue
+        
+        # --- counter discontinuity ---
+        if (
+            prev.event_id == EventID.SWITCH_OFF
+            and curr.counter != 0
+        ):
+            logger.info(
+                "Detected counter discontinuity not caused by rollover, inserting synthetic MISS_LOGS event.",
+                index=i,
+                prev_counter=prev.counter,
+                curr_counter=curr.counter,
+            )
+            miss = _make_synthetic_row(EventID.MISS_LOGS, curr.counter, curr.datetime - _TIMEDELTA_OFFSET_MILLIS)
+            df = _insert_row(df, i, miss)
+            i += 2
+            continue
 
         i += 1
 
@@ -511,7 +600,7 @@ def _validate_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     Validate that the DataFrame has no backward jumps in timestamps and that
     all epoch-year timestamps are covered by a window.
     """
-    remaining_epoch = df[df["datetime"].dt.year == EPOCH_YEAR]
+    remaining_epoch = df[df["datetime"].dt.year == _EPOCH_YEAR]
 
     if not remaining_epoch.empty:
         dropped_count = len(remaining_epoch)
@@ -519,7 +608,7 @@ def _validate_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
             "Dropping unresolved epoch-year rows (no RTC_SET event found).",
             dropped_count=dropped_count,
         )
-        df = df[df["datetime"].dt.year != EPOCH_YEAR].reset_index(drop=True)
+        df = df[df["datetime"].dt.year != _EPOCH_YEAR].reset_index(drop=True)
     
     backward_jumps = df[df["datetime"].diff() < timedelta(0)]
 
@@ -532,91 +621,26 @@ def _validate_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     
     logger.info("Validation passed successfully.")
     return df, True
-
-
-def _rollover_stage(df: pd.DataFrame, sorted_df: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
-    first_real = (
-        df[df["counter"] >= 0].iloc[0] if not df[df["counter"] >= 0].empty else None
-    )
-
-    rollover_idx: int | None = None
-
-    if first_real is not None:
-        first_dt = first_real["datetime"]
-        first_counter = first_real["counter"]
-
-        mask = (
-            (sorted_df["datetime"] == first_dt)
-            & (sorted_df["counter"] == first_counter)
-            & (sorted_df["counter"] >= 0)
-        )
-        idxs = sorted_df.index[mask]
-        rollover_idx = int(idxs[0]) if len(idxs) > 0 and idxs[0] > 0 else None
-
-    sorted_df["rollover"] = False
-
-    if rollover_idx is not None:
-        logger.info(
-            "Detected rollover in logs, marking rows after rollover index.",
-            rollover_index=rollover_idx,
-        )
-        sorted_df.loc[rollover_idx:, "rollover"] = True
-    else:
-        logger.debug("No rollover detected in logs.")
-
-    return sorted_df, rollover_idx
-
-def _detect_rollover(df: pd.DataFrame) -> tuple[bool | None, int | None]:
-    """
-    Detect whether a rollover has occurred by identifying the HL Download event.
-
-    Args:
-        df: DataFrame containing the log records.
-
-    Returns:
-        A tuple ``(rollover_detected, rollover_head_index)``, where
-        ``rollover_detected`` is ``True`` if a rollover is detected, and
-        ``rollover_head_index`` is the index of the rollover head or ``None``
-        if no rollover is detected.
-    """
-
-    hl_download_rows = df[df["event_id"] == HL_DOWNLOAD_EVENT_ID]
-
-    if hl_download_rows.empty:
-        logger.error("No HL Download event found in logs, impossible state.")
-        return None, None
-    
-    if hl_download_rows["datetime"].dt.year.eq(EPOCH_YEAR).any():
-        logger.warning("Detected HL Download event with epoch-year timestamp, skipping rollover detection.")
-        return None, None
-
-    sorted_hl_download_rows = hl_download_rows.sort_values(by="datetime", ascending=False)
-    most_recent_row = sorted_hl_download_rows.index[0]
-    next_row = df.iloc[most_recent_row + 1] if most_recent_row + 1 < len(df) else None
-
-    if next_row is None:
-        logger.debug("HL Download event is the last row, no rollover detected.")
-        return False, None
-    
-    return True, most_recent_row
             
 
-def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None, int, int]:
+def clean_timestamps(
+        df: pd.DataFrame
+) -> tuple[pd.DataFrame | None, int | None]:
 
     if df.empty:
-        return df.copy(), None, 0, 0
+        return df.copy(), None
 
     df, parse_success = _parse_datetime_stage(df)
 
     if not parse_success:
         logger.error("Failed to parse datetime values in all rows.")
-        return None, None, 0, 0
+        return None, None
     
     initial_len = len(df)
 
-    is_rollover, rollover_head_idx = _detect_rollover(df)
+    rollover_detected, rollover_head_idx = _rollover_stage(df)
 
-    if is_rollover:
+    if rollover_detected:
         logger.info("Traslating dataframe to account for rollover.", rollover_head_index=rollover_head_idx)
         df =pd.concat(
             [
@@ -627,20 +651,8 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None,
         )
 
     df = _normalize_stage(df)
-    df = _align_stage(df)
+    # df = _align_stage(df)
     
-    # Sort the dataframe
-    sorted_df = df.sort_values(by=["datetime", "counter"]).reset_index(drop=True)
-    pre_validation_len = len(sorted_df)
+    inserted_count = len(df) - initial_len
 
-    sorted_df, is_valid = _validate_stage(sorted_df)
-
-    if not is_valid:
-        return None, None, 0, 0
-    
-    inserted_count = pre_validation_len - initial_len
-    dropped_count = pre_validation_len - len(sorted_df)
-
-    sorted_df, rollover_idx = _rollover_stage(df, sorted_df)
-
-    return sorted_df, rollover_idx, inserted_count, dropped_count
+    return df, rollover_head_idx

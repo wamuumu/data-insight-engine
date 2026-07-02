@@ -1,19 +1,15 @@
-# Event IDs for parsing and processing history logs
-SWITCH_ON_EVENT_ID = 1
-SWITCH_OFF_EVENT_ID = 2
-RTC_SET_EVENT_ID = 11
-HL_DOWNLOAD_EVENT_ID = 45
-RTC_RESET_EVENT_ID = -11
-RTC_GUESSED_EVENT_ID = -12
+from enum import IntEnum
 
-# Firmware version fallback
-UNDEFINED_FIRMWARE_VERSION = -1
-
-# Epoch year used by device when RTC has not been set
-EPOCH_YEAR = 2000
-
-# Sentinel marker value
-SENTINEL_VALUE = -1
+class EventID(IntEnum):
+    SWITCH_ON = 1
+    SWITCH_OFF = 2
+    RTC_SET = 11
+    HL_DOWNLOAD = 45
+    RTC_RESET = 100
+    MISS_LOGS = 101
+    MISS_DATA_START = 102
+    MISS_DATA_END = 103
+    GUESS_DATA = 104
 
 # File extensions supported by the system
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".xlsx", ".parquet"})
