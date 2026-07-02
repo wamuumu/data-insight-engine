@@ -3,7 +3,7 @@ import pandas as pd
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, HistoryLogRecord, HistoryLogStream
-from ingestion.processing.datetime_cleaner import clean_timestamps
+from ingestion.processing.timestamp_cleaner import clean_timestamps
 from ingestion.processing.firmware_lookup import build_firmware_lookup
 
 logger = get_logger(__name__)

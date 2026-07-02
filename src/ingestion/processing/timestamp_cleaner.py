@@ -312,15 +312,32 @@ def _guess_epoch_windows(
 # --- Timestamp cleaning and alignment stages ---
 
 
-def _parse_stage(df: pd.DataFrame) -> pd.DataFrame:
+def _parse_datetime_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    """
+    Parse the 'date' and 'time' columns into a single 'datetime' column, handling errors gracefully.
+
+    Args:
+        df: DataFrame containing the log records.
+
+    Returns:
+        A tuple ``(df, success)``, where
+        ``df`` is a deepcopy of the DataFrame with the parsed datetime column, and
+        ``success`` is ``True`` if all datetime values were parsed successfully, and ``False`` otherwise.
+    """
+
     df = copy.deepcopy(df).reset_index(drop=True)
 
-    df["datetime"] = pd.to_datetime(
-        df["date"].astype(str) + " " + df["time"].astype(str),
-        dayfirst=True,
-    )
+    date = pd.to_datetime(df["date"], dayfirst=True, format="mixed", errors="coerce").dt.strftime("%d/%m/%Y")
+    time = pd.to_datetime(df["time"], format="mixed", errors="coerce").dt.strftime("%H:%M:%S.%f").str[:-3]
 
-    return df
+    df["datetime"] = pd.to_datetime(date + " " + time, format="%d/%m/%Y %H:%M:%S.%f", errors="coerce")
+
+    # check if any datetime parsing failed
+    if df["datetime"].isnull().any():
+        logger.error("Failed to parse some datetime values")
+        return df, False
+
+    return df, True
 
 
 def _normalize_stage(df: pd.DataFrame) -> pd.DataFrame:
@@ -549,7 +566,7 @@ def _rollover_stage(df: pd.DataFrame, sorted_df: pd.DataFrame) -> tuple[pd.DataF
 
     return sorted_df, rollover_idx
 
-def _detect_rollover(df: pd.DataFrame) -> tuple[bool, int | None]:
+def _detect_rollover(df: pd.DataFrame) -> tuple[bool | None, int | None]:
     """
     Detect whether a rollover has occurred by identifying the HL Download event.
 
@@ -563,15 +580,25 @@ def _detect_rollover(df: pd.DataFrame) -> tuple[bool, int | None]:
         if no rollover is detected.
     """
 
-    is_rollover_detected = False
-    rollover_head_index: int | None = None
+    hl_download_rows = df[df["event_id"] == HL_DOWNLOAD_EVENT_ID]
 
-    for i in range(len(df) - 1):
-        current_row = df.iloc[i]
-        next_row = df.iloc[i + 1]
+    if hl_download_rows.empty:
+        logger.error("No HL Download event found in logs, impossible state.")
+        return None, None
+    
+    if hl_download_rows["datetime"].dt.year.eq(EPOCH_YEAR).any():
+        logger.warning("Detected HL Download event with epoch-year timestamp, skipping rollover detection.")
+        return None, None
 
-        if current_row["event_id"] == HL_DOWNLOAD_EVENT_ID:
-            pass
+    sorted_hl_download_rows = hl_download_rows.sort_values(by="datetime", ascending=False)
+    most_recent_row = sorted_hl_download_rows.index[0]
+    next_row = df.iloc[most_recent_row + 1] if most_recent_row + 1 < len(df) else None
+
+    if next_row is None:
+        logger.debug("HL Download event is the last row, no rollover detected.")
+        return False, None
+    
+    return True, most_recent_row
             
 
 def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None, int, int]:
@@ -579,9 +606,16 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame | None, int | None,
     if df.empty:
         return df.copy(), None, 0, 0
 
+    df, parse_success = _parse_datetime_stage(df)
+
+    if not parse_success:
+        logger.error("Failed to parse datetime values in all rows.")
+        return None, None, 0, 0
+    
     initial_len = len(df)
 
-    df = _parse_stage(df)
+    is_rollover, rollover_head_idx = _detect_rollover(df)
+
     df = _normalize_stage(df)
     df = _align_stage(df)
     
