@@ -5,11 +5,11 @@ class EventID(IntEnum):
     SWITCH_OFF = 2
     RTC_SET = 11
     HL_DOWNLOAD = 45
-    RTC_RESET = 100
-    MISS_LOGS = 101
-    MISS_DATA_START = 102
-    MISS_DATA_END = 103
-    GUESS_DATA = 104
+    MISS_LOGS = 100
+    RTC_RESET = 101
+    RTC_GUESS = 102
+    RTC_MISS_START = 103
+    RTC_MISS_END = 104
 
 # File extensions supported by the system
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".xlsx", ".parquet"})
