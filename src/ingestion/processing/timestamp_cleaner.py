@@ -16,6 +16,13 @@ _EPOCH_YEAR = 2000
 _SENTINEL_VALUE = 1
 _TIMEDELTA_OFFSET_SECOND = timedelta(seconds=1)
 _TIMEDELTA_OFFSET_MILLIS = timedelta(milliseconds=1)
+_MARKER_EVENTS = {
+    EventID.RTC_RESET,
+    EventID.MISS_LOGS,
+    EventID.RTC_GUESS,
+    EventID.RTC_MISS_START,
+    EventID.RTC_MISS_END,
+}
 
 @dataclass
 class Window:
@@ -25,7 +32,7 @@ class Window:
     start_dt: datetime
     end_idx: int
     end_dt: datetime
-    is_guessed: bool
+    is_guessable: bool
     rtc_anchor_idx: int | None = None
     rtc_anchor_dt: datetime | None = None
 
@@ -148,7 +155,7 @@ def _detect_windows(df: pd.DataFrame) -> list[Window]:
                 end_idx=end_idx,
                 start_dt=start_dt,
                 end_dt=end_dt,
-                is_guessed=True if rtc_anchor_dt is not None else False,
+                is_guessable=True if rtc_anchor_dt is not None else False,
                 rtc_anchor_idx=rtc_anchor_idx,
                 rtc_anchor_dt=rtc_anchor_dt
             )
@@ -185,6 +192,150 @@ def _shift_window(df: pd.DataFrame, window: Window):
 
     for i in range(window.start_idx, window.end_idx + 1):
         df.at[i, "datetime"] = df.at[i, "datetime"] + delta
+
+    window.start_dt = df.at[window.start_idx, "datetime"]
+    window.end_dt = df.at[window.end_idx, "datetime"]
+
+
+def _window_data_bounds(df: pd.DataFrame, window: Window) -> tuple[int, int]:
+    """
+    Determine the start and end indices of the data within the specified window.
+
+    Args:
+        df: DataFrame containing the log records.
+        window: Window object representing the contiguous slice of logs.
+    
+    Returns:
+        A tuple ``(data_start_idx, data_end_idx)``, where
+        ``data_start_idx`` is the index of the first row in the window that is not a marker event, and
+        ``data_end_idx`` is the index of the last row in the window that is not a marker event.
+    """
+    data_start_idx = window.start_idx
+    if df.at[data_start_idx, "event_id"] in _MARKER_EVENTS:
+        data_start_idx += 1
+
+    data_end_idx = window.end_idx
+    if data_end_idx >= data_start_idx and df.at[data_end_idx, "event_id"] in _MARKER_EVENTS:
+        data_end_idx -= 1
+
+    return data_start_idx, data_end_idx
+
+
+def _resolve_anchors_and_shift(df: pd.DataFrame, windows: list[Window]):
+    """
+    Resolve the RTC anchors for each window and shift the timestamps accordingly.
+
+    Args:
+        df: DataFrame containing the log records.
+        windows: List of Window objects representing the contiguous slices of logs to be shifted.
+    """
+    last_win: Window | None = None
+
+    for i, win in enumerate(reversed(windows)):
+        if win.rtc_anchor_dt is None:
+            if i == 0:
+                logger.warning(
+                    "Last window has no RTC anchor. Using latest HL_DOWNLOAD as default anchor."
+                )
+                hl_rows = (
+                    df[df.event_id == EventID.HL_DOWNLOAD]
+                    .sort_values("datetime", ascending=False)
+                )
+                win.rtc_anchor_idx = hl_rows.index[0]
+                win.rtc_anchor_dt = hl_rows.iloc[0]["datetime"]
+            else:
+                logger.warning(
+                    "Window has no RTC anchor. Guessing from last window."
+                )
+                win.rtc_anchor_idx = last_win.start_idx
+                win.rtc_anchor_dt = last_win.start_dt
+        
+        _shift_window(df, win)
+        last_win = win
+
+
+def _insert_window_sentinels(df: pd.DataFrame, window: Window) -> pd.DataFrame:
+    """
+    Insert synthetic sentinel events at the start and end of the specified window.
+
+    Args:
+        df: DataFrame containing the log records.
+        window: Window object representing the contiguous slice of logs where sentinels will be inserted.
+    
+    Returns:
+        A new DataFrame with synthetic sentinel events inserted at the start and end of the specified window.
+    """
+    data_start, data_end = _window_data_bounds(df, window)
+
+    if data_start > data_end:
+        logger.warning("Window has no data rows, skipping sentinel insertion.", window=window)
+        return df
+    
+
+    if window.is_guessable:
+        ref_dt = df.at[data_start, "datetime"]
+        ref_counter = df.at[data_start, "counter"]
+
+        guess = _make_synthetic_row(
+            EventID.RTC_GUESS,
+            _SENTINEL_VALUE,
+            ref_dt - _TIMEDELTA_OFFSET_MILLIS,
+            ref_counter,
+        )
+        df = _insert_row(df, data_start, guess)
+        df = _increase_counter(df, data_start + 1)
+        return df
+    
+    if data_start == 0:
+        start_dt = df.at[0, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
+        start_counter = 0
+    else:
+        start_dt = df.at[data_start - 1, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
+        start_counter = df.at[data_start - 1, "counter"] + 1
+    
+    miss_start = _make_synthetic_row(
+        EventID.RTC_MISS_START,
+        _SENTINEL_VALUE,
+        start_dt,
+        start_counter,
+    )
+    df = _insert_row(df, data_start, miss_start)
+    df = _increase_counter(df, data_start + 1)
+
+    data_end += 1
+
+    if data_end + 1 >= len(df):
+        end_dt = df.at[len(df) - 1, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
+        end_counter = df.at[len(df) - 1, "counter"] + 1
+
+        miss_end = _make_synthetic_row(
+            EventID.RTC_MISS_END,
+            _SENTINEL_VALUE,
+            end_dt,
+            end_counter,
+        )
+        
+        df = _insert_row(df, data_end, miss_end, after=True)
+    else:
+        if df.at[data_end + 1, "event_id"] in _MARKER_EVENTS:
+            data_end += 1
+        
+        end_dt = df.at[data_end + 1, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
+        miss_end = _make_synthetic_row(
+            EventID.RTC_MISS_END,
+            _SENTINEL_VALUE,
+            end_dt,
+            0
+        )
+        
+        df = _insert_row(df, data_end, miss_end)
+
+        df.at[data_end + 1, "counter"] = 0
+        df.at[data_end + 1, "datetime"] = end_dt
+        df = _increase_counter(df, data_end + 2)
+        df = _increase_counter(df, data_end + 1)
+
+    return df
 
 
 # --- Timestamp cleaning and alignment stages ---
@@ -279,7 +430,7 @@ def _normalize_stage(df: pd.DataFrame) -> pd.DataFrame:
                 prev_datetime=prev.datetime,
                 curr_datetime=curr.datetime,
             )
-            reset = _make_synthetic_row(EventID.RTC_RESET, _SENTINEL_VALUE, prev.datetime + _TIMEDELTA_OFFSET_SECOND, prev.counter + 1)
+            reset = _make_synthetic_row(EventID.RTC_RESET, _SENTINEL_VALUE, prev.datetime + _TIMEDELTA_OFFSET_MILLIS, prev.counter + 1)
             df = _insert_row(df, i, reset)
             i += 2
             continue
@@ -315,319 +466,12 @@ def _align_stage(df: pd.DataFrame) -> pd.DataFrame:
         logger.debug("No windows detected, skipping alignment stage.")
         return df
 
-    reversed_windows = list(reversed(windows))
-
-    last_win: Window | None = None
-    for i, win in enumerate(reversed_windows):
-        if win.rtc_anchor_dt is None:
-            if i == 0:
-                logger.warning("Detected last window without RTC anchor, using HL Download event as anchor for guessing.", window=win)
-                hl_download_rows = df[df["event_id"] == EventID.HL_DOWNLOAD].sort_values(by="datetime", ascending=False)
-                last_row_idx = hl_download_rows.index[0]
-                win.rtc_anchor_idx = last_row_idx
-                win.rtc_anchor_dt = df.at[last_row_idx, "datetime"]
-            else:
-                logger.warning("Detected window without RTC anchor, using last known window's start as anchor for guessing.", window=win, last_window=last_win)
-                win.rtc_anchor_idx = last_win.start_idx
-                win.rtc_anchor_dt = df.at[last_win.start_idx, "datetime"]
-        _shift_window(df, win)
-        last_win = win
-
-    markers = [EventID.RTC_RESET, EventID.MISS_LOGS, EventID.RTC_GUESS, EventID.RTC_MISS_START, EventID.RTC_MISS_END]
-
-    for win in reversed_windows:
-        if win.is_guessed:
-            logger.info("Detected window with RTC anchor, adding synthetic RTC_GUESS event.", window=win)
-            opens_with_marker = df.at[win.start_idx, "event_id"] in markers
-            guess_idx = win.start_idx + 1 if opens_with_marker else win.start_idx
-            guess_dt = df.at[guess_idx, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
-            guess = _make_synthetic_row(EventID.RTC_GUESS, _SENTINEL_VALUE, guess_dt, 0)
-            df = _insert_row(df, guess_idx, guess)
-            df = _increase_counter(df, guess_idx + 1)
-        else:
-            logger.info("Detected window without RTC anchor, adding synthetic RTC_MISS_START and RTC_MISS_END events.", window=win)
-            opens_with_marker = df.at[win.start_idx, "event_id"] in markers
-            start_idx = win.start_idx if win.start_idx > 0 and opens_with_marker else 0
-            start_dt = df.at[start_idx, "datetime"] + _TIMEDELTA_OFFSET_MILLIS if start_idx > 0 else df.at[start_idx, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
-            start_counter = df.at[start_idx, "counter"] + 1 if start_idx > 0 else 0
-            miss_start = _make_synthetic_row(EventID.RTC_MISS_START, _SENTINEL_VALUE, start_dt, start_counter)
-            df = _insert_row(df, start_idx, miss_start, after=True) if start_idx > 0 else _insert_row(df, start_idx, miss_start)
-            
-            if start_idx == 0:
-                df = _increase_counter(df, start_idx + 1)
-            
-            closes_with_marker = df.at[win.end_idx, "event_id"] in markers
-            end_idx = win.end_idx + 1 if closes_with_marker else win.end_idx
-            end_dt = df.at[end_idx, "datetime"] - _TIMEDELTA_OFFSET_MILLIS if end_idx < len(df) else df.at[end_idx - 1, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
-            end_counter = df.at[end_idx, "counter"] + 1 if end_idx < len(df) else df.at[end_idx - 1, "counter"] + 1
-            miss_end = _make_synthetic_row(EventID.RTC_MISS_END, _SENTINEL_VALUE, end_dt, end_counter)
-            df = _insert_row(df, end_idx, miss_end, after=True) if end_idx < len(df) else _insert_row(df, end_idx, miss_end)
-
-
-    # row_offset = 0
-    # for win in windows:
-
-    #     if win.is_guessed:
-    #         logger.info("Detected window with RTC anchor, adding synthetic RTC_GUESS event.", window=win)
-    #         idx = win.start_idx + row_offset
-    #         opens_with_marker = df.at[idx, "event_id"] in markers
-
-    #         if opens_with_marker:
-    #             anchor_dt = df.at[idx + 1, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
-    #             guess = _make_synthetic_row(EventID.RTC_GUESS, _SENTINEL_VALUE, anchor_dt, df.at[idx + 1, "counter"])
-    #             df = _insert_row(df, win.start_idx + row_offset, guess, after=True)
-    #             df = _increase_counter(df, win.start_idx + row_offset + 2)
-    #         else:
-    #             anchor_dt = df.at[idx, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
-    #             guess = _make_synthetic_row(EventID.RTC_GUESS, _SENTINEL_VALUE, anchor_dt, df.at[idx, "counter"])
-    #             df = _insert_row(df, win.start_idx + row_offset, guess)
-    #             df = _increase_counter(df, win.start_idx + row_offset + 1)
-
-    #         row_offset += 1
-
-    #     else:
-    #         logger.info("Detected window without RTC anchor, adding synthetic RTC_MISS_START and RTC_MISS_END events.", window=win)
-
-    #         start_idx = win.start_idx + row_offset - 1
-    #         end_idx = win.end_idx + row_offset + 1
-
-    #         opens_with_marker = df.at[start_idx + 1, "event_id"] in markers
-    #         closes_with_marker = df.at[end_idx - 1, "event_id"] in markers
-
-    #         if start_idx < 0:
-    #             start_dt = df.at[0, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
-    #             miss_start = _make_synthetic_row(EventID.RTC_MISS_START, _SENTINEL_VALUE, start_dt, 0)
-    #             df = _insert_row(df, 0, miss_start)
-    #             df = _increase_counter(df, 1)
-    #         else:
-    #             start_dt = df.at[start_idx, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
-    #             start_counter = df.at[start_idx, "counter"] + 1
-    #             miss_start = _make_synthetic_row(EventID.RTC_MISS_START, _SENTINEL_VALUE, start_dt, start_counter)
-    #             df = _insert_row(df, start_idx, miss_start, after=True)
-            
-    #         row_offset += 1
-    #         end_idx += 1
-            
-    #         if end_idx >= len(df):
-    #             end_dt = df.at[len(df) - 1, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
-    #             end_counter = df.at[len(df) - 1, "counter"] + 1
-    #             miss_end = _make_synthetic_row(EventID.RTC_MISS_END, _SENTINEL_VALUE, end_dt, end_counter)
-    #             df = _insert_row(df, len(df) - 1, miss_end, after=True)
-    #         else:
-    #             end_dt = df.at[end_idx, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
-    #             miss_end = _make_synthetic_row(EventID.RTC_MISS_END, _SENTINEL_VALUE, end_dt, 0)
-    #             df = _insert_row(df, end_idx, miss_end)
-    #             df = _increase_counter(df, end_idx + 1)
-
-    #         row_offset += 1
-
-
-    for i, log in enumerate(df.itertuples(index=False)):
-        logger.debug(
-            "Post-alignment log entry.",
-            index=i,
-            counter=log.counter,
-            datetime=log.datetime,
-            event_id=log.event_id
-        )
-
-
-def _align_stage_v1(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Align epoch windows and insert synthetic markers.
-
-    Windows are processed from the end of the dataframe so that inserting rows
-    never invalidates the indices of windows that still have to be processed.
-    """
-
-    windows = _detect_windows(df)
-
-    if not windows:
-        logger.debug("No windows detected.")
-        return df
-
-    #
-    # ---------------------------------------------------------------
-    # First pass:
-    # Guess anchors and shift timestamps.
-    # ---------------------------------------------------------------
-    #
-
-    last_window: Window | None = None
-
-    for i, win in enumerate(reversed(windows)):
-
-        if win.rtc_anchor_dt is None:
-
-            if i == 0:
-                logger.warning(
-                    "Last window has no RTC anchor. Using latest HL_DOWNLOAD."
-                )
-
-                hl = (
-                    df[df.event_id == EventID.HL_DOWNLOAD]
-                    .sort_values("datetime", ascending=False)
-                    .iloc[0]
-                )
-
-                win.rtc_anchor_idx = hl.name
-                win.rtc_anchor_dt = hl.datetime
-
-            else:
-                logger.warning(
-                    "Window has no RTC anchor. Guessing from next window."
-                )
-
-                win.rtc_anchor_idx = last_window.start_idx
-                win.rtc_anchor_dt = last_window.start_dt
-
-        _shift_window(df, win)
-        last_window = win
-
-    #
-    # ---------------------------------------------------------------
-    # Second pass:
-    # Insert sentinels.
-    #
-    # Again backwards -> indices never change for remaining windows.
-    # ---------------------------------------------------------------
-    #
+    _resolve_anchors_and_shift(df, windows)
 
     for win in reversed(windows):
-
-        #
-        # ===========================================================
-        # RTC_GUESS
-        # ===========================================================
-        #
-
-        if win.is_guessed:
-
-            insert_idx = win.start_idx
-
-            if (
-                insert_idx > 0
-                and df.at[insert_idx - 1, "event_id"] == EventID.RTC_RESET
-            ):
-                #
-                # RTC_RESET
-                # RTC_GUESS
-                # first log
-                #
-                guess = _make_synthetic_row(
-                    EventID.RTC_GUESS,
-                    _SENTINEL_VALUE,
-                    df.at[insert_idx, "datetime"],
-                    df.at[insert_idx, "counter"],
-                )
-
-                df = _insert_row(df, insert_idx - 1, guess, after=True)
-
-                _increase_counter(df, insert_idx + 1)
-
-            else:
-                #
-                # RTC_GUESS
-                # first log
-                #
-                guess = _make_synthetic_row(
-                    EventID.RTC_GUESS,
-                    _SENTINEL_VALUE,
-                    df.at[insert_idx, "datetime"],
-                    df.at[insert_idx, "counter"],
-                )
-
-                df = _insert_row(df, insert_idx, guess)
-
-                _increase_counter(df, insert_idx + 1)
-
-        #
-        # ===========================================================
-        # RTC_MISS_START / RTC_MISS_END
-        # ===========================================================
-        #
-
-        else:
-
-            #
-            # ----- START -----
-            #
-
-            if win.start_idx == 0:
-
-                start_dt = df.at[0, "datetime"]
-                start_counter = 0
-
-                miss_start = _make_synthetic_row(
-                    EventID.RTC_MISS_START,
-                    _SENTINEL_VALUE,
-                    start_dt - _TIMEDELTA_OFFSET_MILLIS,
-                    start_counter,
-                )
-
-                df = _insert_row(df, 0, miss_start)
-
-                _increase_counter(df, 1)
-
-            else:
-
-                prev_idx = win.start_idx - 1
-
-                miss_start = _make_synthetic_row(
-                    EventID.RTC_MISS_START,
-                    _SENTINEL_VALUE,
-                    df.at[prev_idx, "datetime"] + _TIMEDELTA_OFFSET_MILLIS,
-                    df.at[prev_idx, "counter"] + 1,
-                )
-
-                df = _insert_row(df, prev_idx, miss_start, after=True)
-
-            #
-            # Since we inserted BEFORE the window,
-            # its end shifted by +1.
-            #
-
-            end_idx = win.end_idx + 1
-
-            #
-            # ----- END -----
-            #
-
-            if end_idx + 1 >= len(df):
-
-                miss_end = _make_synthetic_row(
-                    EventID.RTC_MISS_END,
-                    _SENTINEL_VALUE,
-                    df.at[end_idx, "datetime"] + _TIMEDELTA_OFFSET_MILLIS,
-                    df.at[end_idx, "counter"] + 1,
-                )
-
-                df = _insert_row(df, end_idx, miss_end, after=True)
-
-            else:
-
-                next_idx = end_idx + 1
-
-                miss_end = _make_synthetic_row(
-                    EventID.RTC_MISS_END,
-                    _SENTINEL_VALUE,
-                    df.at[next_idx, "datetime"] - _TIMEDELTA_OFFSET_MILLIS,
-                    df.at[end_idx, "counter"] + 1, 
-                )
-
-                df = _insert_row(df, next_idx, miss_end)
+        df = _insert_window_sentinels(df, win)
     
-    for i, log in enumerate(df.itertuples(index=False)):
-        logger.debug(
-            "Post-alignment log entry.",
-            index=i,
-            counter=log.counter,
-            datetime=log.datetime,
-            event_id=log.event_id
-        )
-
     return df
-
 
 
 def clean_timestamps(
@@ -656,7 +500,16 @@ def clean_timestamps(
         )
 
     df = _normalize_stage(df)
-    df = _align_stage_v1(df)
+    df = _align_stage(df)
+
+    for i, log in enumerate(df.itertuples(index=False)):
+        logger.debug(
+            "Post-cleaning log entry.",
+            idx=i,
+            counter=log.counter,
+            datetime=log.datetime,
+            event_id=log.event_id
+        )
 
     exit(0)
 
