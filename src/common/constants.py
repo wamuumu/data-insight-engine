@@ -4,6 +4,7 @@ class EventID(IntEnum):
     SWITCH_ON = 1
     SWITCH_OFF = 2
     RTC_SET = 11
+    HL_RESET = 43
     HL_DOWNLOAD = 45
     MISS_LOGS = 100
     RTC_RESET = 101
