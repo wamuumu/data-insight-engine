@@ -88,7 +88,6 @@ def _make_synthetic_row(dt: datetime, event_id: EventID, value: int) -> dict:
         A dictionary representing the synthetic sentinel row.
     """
     return {
-        "counter": None,
         "date": dt.date().strftime("%d/%m/%Y"),
         "time": dt.time().strftime("%H:%M:%S.%f")[:-3],
         "event_id": event_id,
@@ -368,7 +367,7 @@ def _resolve_and_shift(df: pd.DataFrame, windows: list[Window]):
             reference_dt = next_chain_reference_dt 
 
         last_dt = df.at[win.end_idx, "datetime"]
-        delta = reference_dt - last_dt
+        delta = reference_dt - last_dt - _TIMEDELTA_OFFSET_MILLIS
 
         for i in range(win.start_idx, win.end_idx + 1):
             df.at[i, "datetime"] += delta
@@ -525,14 +524,16 @@ def _assemble(
 
     for i in range(n):
         # Prepend sentinels before the current row
-        for _, row in sorted(before.get(i, []), key=lambda x: x[0]):
+        before_priorities = sorted(before.get(i, []), key=lambda x: x[0])
+        for priority, row in before_priorities:
             rows.append(row)
-        
+
         # Current row
         rows.append(df.iloc[i].to_dict())
 
         # Postpend sentinels after the current row
-        for _, row in sorted(after.get(i, []), key=lambda x: x[0]):
+        after_priorities = sorted(after.get(i, []), key=lambda x: x[0])
+        for priority, row in after_priorities:
             rows.append(row)
     
     return pd.DataFrame(rows, columns=df.columns).reset_index(drop=True)
@@ -543,15 +544,17 @@ def _assemble(
 # --------------------------------------------------------------------------- #
 
 
-def _calculate_tssc(df: pd.DataFrame):
+def _compute_tssc(df: pd.DataFrame) -> bool:
     """
     Calculate the Timestamp Session Start + Counter (TSSC) for each row in the DataFrame.
 
     Args:
         df: DataFrame containing the log records.
+
+    Returns:
+        True if TSSC values were successfully computed for all rows, False otherwise.
     """
     session_start_dt: datetime | None = None
-    session_start_counter: int | None = None
 
     tssc_values: list[int] = []
 
@@ -559,20 +562,31 @@ def _calculate_tssc(df: pd.DataFrame):
         event_id = row["event_id"]
         counter = row["counter"]
         dt = row["datetime"]
+        
+        is_truncated = False
+        if i > 0:
+            prev_counter = df.at[i - 1, "counter"]
+            if _counter_gap(prev_counter, counter):
+                is_truncated = True
 
-        if event_id in _SESSION_START_EVENTS:
+        if event_id in _SESSION_START_EVENTS or is_truncated:
             session_start_dt = dt
-            session_start_counter = counter
-        
-        if session_start_dt is not None and session_start_counter is not None:
-            delta_seconds = int((dt - session_start_dt).total_seconds())
-            tssc = (delta_seconds << 16) | (counter - session_start_counter)
-        else:
-            tssc = 0  # Default value when no session start has been detected yet
-        
+
+        if session_start_dt is None:
+            logger.error("Cannot compute TSSC: no session start event found before row.", row=row.to_dict())
+            return False
+
+        tssc = int((session_start_dt - _TSSC_TIMESTAMP_ANCHOR).total_seconds() * 1000) + counter
         tssc_values.append(tssc)
-    
+
     df["tssc"] = tssc_values
+
+    if df["tssc"].isnull().any():
+        logger.error("Failed to compute TSSC for some rows.")
+        return False
+
+    return True
+
 
 # --------------------------------------------------------------------------- #
 # Orchestrator
@@ -615,11 +629,16 @@ def clean_timestamps(
     windows = _detect_windows(df, breaks)
     _resolve_and_shift(df, windows)
 
+    tssc_computed = _compute_tssc(df)
+
+    if not tssc_computed:
+        return None, None
+
     before, after = _build_sentinels(df, windows, breaks)
     result = _assemble(df, before, after)
 
-    for i, log in enumerate(result.itertuples(index=False)):
-        logger.debug("Post-cleaning log entry.", idx=i, counter=log.counter, datetime=log.datetime, event_id=log.event_id)
+    # for i, log in enumerate(result.itertuples(index=False)):
+    #     logger.debug("Post-cleaning log entry.", idx=i, counter=log.counter, datetime=log.datetime, event_id=log.event_id)
 
     exit(0)
 
