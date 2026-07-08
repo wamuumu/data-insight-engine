@@ -75,7 +75,11 @@ class Window:
 # --------------------------------------------------------------------------- #
 
 
-def _make_synthetic_row(dt: datetime, event_id: EventID, value: int) -> dict:
+def _make_synthetic_row(
+    dt: datetime, 
+    event_id: EventID, 
+    value: int
+) -> dict:
     """
     Construct a synthetic sentinel row dictionary with the specified parameters.
 
@@ -83,17 +87,18 @@ def _make_synthetic_row(dt: datetime, event_id: EventID, value: int) -> dict:
         dt: The datetime for the synthetic row.
         event_id: The EventID for the synthetic row.
         value: The value associated with the synthetic row.
-    
     Returns:
         A dictionary representing the synthetic sentinel row.
     """
     return {
-        "date": dt.date().strftime("%d/%m/%Y"),
-        "time": dt.time().strftime("%H:%M:%S.%f")[:-3],
+        "counter": pd.NA,
+        "date": pd.NA,
+        "time": pd.NA,
         "event_id": event_id,
         "description": event_id.name.replace("_", " "),
         "value": value,
         "datetime": dt,
+        "tssc": pd.NA,
     }
 
 
@@ -127,12 +132,21 @@ def _counter_gap(prev_counter: int, curr_counter: int) -> bool:
     return curr_counter != expected
 
 
+def _polish_result(df: pd.DataFrame):
+    """
+    Perform final polishing on the cleaned DataFrame, dropping unecessary columns.
+
+    Args:
+        df: The cleaned DataFrame to polish.
+    """
+    df.drop(columns=["counter", "description"], inplace=True)
+
 # --------------------------------------------------------------------------- #
 # Stage 1 -- parsing
 # --------------------------------------------------------------------------- #
 
 
-def _parse_datetime_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+def _parse_datetime_stage(df: pd.DataFrame) -> pd.DataFrame:
     """
     Parse the 'date' and 'time' columns into a single 'datetime' column, handling errors gracefully.
 
@@ -140,9 +154,7 @@ def _parse_datetime_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
         df: DataFrame containing the log records.
 
     Returns:
-        A tuple ``(df, success)``, where
-        ``df`` is a deepcopy of the DataFrame with the parsed datetime column, and
-        ``success`` is ``True`` if all datetime values were parsed successfully, and ``False`` otherwise.
+        A DataFrame with the parsed datetime column.
     """
 
     df = df.copy(deep=True).reset_index(drop=True)
@@ -150,20 +162,19 @@ def _parse_datetime_stage(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     try:
         dt = pd.to_datetime(df["date"] + " " + df["time"], dayfirst=True, format="%d/%m/%Y %H:%M:%S.%f")
     except Exception as e:
-        logger.error("Failed to parse datetime values.", error=str(e))
-        return df, False
+        raise ValueError("Failed to parse 'date' and 'time' columns into datetime.") from e
 
     df["datetime"] = dt
 
-    return df, True
+    return df
 
 
 # --------------------------------------------------------------------------- #
-# Stage 2 -- rollover (whole-file memory-wraparound) detection
+# Memory rollover detection and rotation
 # --------------------------------------------------------------------------- #
 
 
-def _rollover_stage(df: pd.DataFrame) -> tuple[bool | None, int | None]:
+def _rollover_stage(df: pd.DataFrame) -> int | None:
     """
     Detect whether a rollover has occurred by identifying the HL Download event.
 
@@ -171,21 +182,16 @@ def _rollover_stage(df: pd.DataFrame) -> tuple[bool | None, int | None]:
         df: DataFrame containing the log records.
 
     Returns:
-        A tuple ``(rollover_detected, rollover_head_index)``, where
-        ``rollover_detected`` is ``True`` if a rollover is detected, and
-        ``rollover_head_index`` is the index of the rollover head or ``None``
-        if no rollover is detected.
+        The index of the rollover head or ``None`` if no rollover is detected.
     """
 
     hl_rows = df[df["event_id"] == EventID.HL_DOWNLOAD]
 
     if hl_rows.empty:
-        logger.error("No HL Download event found in logs, impossible state.")
-        return None, None
+        raise LookupError("No HL Download event found in logs, impossible state.")
     
     if hl_rows["datetime"].dt.year.eq(_EPOCH_YEAR).any():
-        logger.warning("Detected HL Download event with epoch-year timestamp, skipping rollover detection.")
-        return None, None
+        raise ValueError("HL Download event has epoch-year timestamp, cannot determine rollover.")
 
     # Deterministic tie-break
     ordered = hl_rows.sort_values(by="datetime", ascending=False, kind="stable")
@@ -195,9 +201,9 @@ def _rollover_stage(df: pd.DataFrame) -> tuple[bool | None, int | None]:
 
     if most_recent_idx == len(df) - 1:
         logger.debug("HL Download event is the last row, no rollover detected.")
-        return False, None
+        return None
     
-    return True, int(most_recent_idx)
+    return int(most_recent_idx)
 
 
 def _rotate_for_rollover(df: pd.DataFrame, rollover_head_idx: int) -> pd.DataFrame:
@@ -221,7 +227,7 @@ def _rotate_for_rollover(df: pd.DataFrame, rollover_head_idx: int) -> pd.DataFra
 
 
 # --------------------------------------------------------------------------- #
-# Stage 3 -- break detection (pure / read-only)
+# Discontinuity / break detection
 # --------------------------------------------------------------------------- #
 
 
@@ -279,7 +285,7 @@ def _detect_breaks(df: pd.DataFrame, seam_idx: int | None) -> list[Break]:
 
 
 # --------------------------------------------------------------------------- #
-# Stage 4 -- epoch window detection (pure / read-only)
+# Invalid window detection
 # --------------------------------------------------------------------------- #
 
 
@@ -344,7 +350,7 @@ def _detect_windows(df: pd.DataFrame, breaks: list[Break]) -> list[Window]:
 
 
 # --------------------------------------------------------------------------- #
-# Stage 5 -- resolve + shift (the ONLY stage allowed to mutate `datetime`)
+# Window resolution and datetime shifting (in-place)
 # --------------------------------------------------------------------------- #
 
 
@@ -364,7 +370,9 @@ def _resolve_and_shift(df: pd.DataFrame, windows: list[Window]):
             # Use the RTC anchor as the reference datetime for this window
             reference_dt = win.rtc_anchor_dt
         else:
-            reference_dt = next_chain_reference_dt 
+            reference_dt = next_chain_reference_dt
+            if reference_dt is None:
+                raise RuntimeError("Cannot resolve unguessable window: no reference datetime available.")
 
         last_dt = df.at[win.end_idx, "datetime"]
         delta = reference_dt - last_dt - _TIMEDELTA_OFFSET_MILLIS
@@ -378,7 +386,7 @@ def _resolve_and_shift(df: pd.DataFrame, windows: list[Window]):
 
 
 # --------------------------------------------------------------------------- #
-# Stage 6 -- build every sentinel row (single pass, no row insertion yet)
+# Sentinel creation
 # --------------------------------------------------------------------------- #
 
 
@@ -499,7 +507,7 @@ def _build_sentinels(
 
 
 # --------------------------------------------------------------------------- #
-# Stage 7 -- single-pass assembly (no pd.concat-in-a-loop, no index drift)
+# Real dataset + synthetic rows assembly (single pass, no row insertion yet)
 # --------------------------------------------------------------------------- #
 
 
@@ -525,7 +533,7 @@ def _assemble(
     for i in range(n):
         # Prepend sentinels before the current row
         before_priorities = sorted(before.get(i, []), key=lambda x: x[0])
-        for priority, row in before_priorities:
+        for _, row in before_priorities:
             rows.append(row)
 
         # Current row
@@ -533,26 +541,24 @@ def _assemble(
 
         # Postpend sentinels after the current row
         after_priorities = sorted(after.get(i, []), key=lambda x: x[0])
-        for priority, row in after_priorities:
+        for _, row in after_priorities:
             rows.append(row)
     
     return pd.DataFrame(rows, columns=df.columns).reset_index(drop=True)
 
 
 # --------------------------------------------------------------------------- #
-# Stage 8 -- TSSC calculation (Timestamp session start + counter)
+# TSSC calculation (Timestamp session start + counter)
 # --------------------------------------------------------------------------- #
 
 
-def _compute_tssc(df: pd.DataFrame) -> bool:
+def _compute_tssc(df: pd.DataFrame, seam_idx: int | None = None):
     """
     Calculate the Timestamp Session Start + Counter (TSSC) for each row in the DataFrame.
 
     Args:
         df: DataFrame containing the log records.
-
-    Returns:
-        True if TSSC values were successfully computed for all rows, False otherwise.
+        seam_idx: Index of the seam row, if applicable.
     """
     session_start_dt: datetime | None = None
 
@@ -564,7 +570,7 @@ def _compute_tssc(df: pd.DataFrame) -> bool:
         dt = row["datetime"]
         
         is_truncated = False
-        if i > 0:
+        if i > 0 and i != seam_idx:
             prev_counter = df.at[i - 1, "counter"]
             if _counter_gap(prev_counter, counter):
                 is_truncated = True
@@ -573,8 +579,7 @@ def _compute_tssc(df: pd.DataFrame) -> bool:
             session_start_dt = dt
 
         if session_start_dt is None:
-            logger.error("Cannot compute TSSC: no session start event found before row.", row=row.to_dict())
-            return False
+            raise RuntimeError("Cannot compute TSSC: no session start event found before row.")
 
         tssc = int((session_start_dt - _TSSC_TIMESTAMP_ANCHOR).total_seconds() * 1000) + counter
         tssc_values.append(tssc)
@@ -582,10 +587,94 @@ def _compute_tssc(df: pd.DataFrame) -> bool:
     df["tssc"] = tssc_values
 
     if df["tssc"].isnull().any():
-        logger.error("Failed to compute TSSC for some rows.")
-        return False
+        raise AssertionError("TSSC computation failed: some rows have NaN TSSC values.")
 
-    return True
+
+def _assign_sentinel_tssc(df: pd.DataFrame):
+    """
+    Assign TSSC values to every synthetic row (sentinel) inserted by the cleaning process.
+
+    Args:
+        df: DataFrame containing the log records, including synthetic rows.
+    """
+    if df["tssc"].notna().all():
+        return
+
+    n = len(df)
+    tssc = df["tssc"].to_numpy(copy=True)
+
+    for i in range(n):
+
+        if pd.notna(tssc[i]):
+            continue
+
+        prev_real = None
+        next_real = None
+
+        if i > 0 and pd.notna(tssc[i - 1]):
+            prev_real = i - 1
+
+        if i + 1 < n and pd.notna(tssc[i + 1]):
+            next_real = i + 1
+
+        if prev_real is None and next_real is None:
+            raise RuntimeError("Cannot assign TSSC to sentinel: no real neighbours found.")
+
+        anchor = None
+        if (
+            prev_real is not None
+            and df.at[i, "datetime"] == df.at[prev_real, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
+        ):
+            anchor = prev_real
+
+        elif (
+            next_real is not None
+            and df.at[i, "datetime"] == df.at[next_real, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
+        ):
+            anchor = next_real
+
+        elif prev_real is not None and next_real is None:
+            anchor = prev_real
+
+        elif next_real is not None and prev_real is None:
+            anchor = next_real
+
+        else:
+            # Fallback
+            prev_delta = abs((df.at[i, "datetime"] - df.at[prev_real, "datetime"]).total_seconds())
+            next_delta = abs((df.at[next_real, "datetime"] - df.at[i, "datetime"]).total_seconds())
+
+            anchor = prev_real if prev_delta <= next_delta else next_real
+
+        anchor_tssc = int(tssc[anchor])
+
+        if anchor == prev_real:
+            value = anchor_tssc + 1
+        else:
+            value = anchor_tssc - 1
+
+        if anchor == prev_real:
+
+            j = i - 1
+            while j >= 0 and pd.isna(df.at[j, "tssc"]):
+                j -= 1
+
+            value = max(value, anchor_tssc + (i - anchor))
+
+        else:
+
+            j = i + 1
+            while j < n and pd.isna(df.at[j, "tssc"]):
+                j += 1
+
+            value = min(value, anchor_tssc - (anchor - i))
+
+        tssc[i] = value
+
+    df["tssc"] = tssc.astype("int64")
+
+    if df["tssc"].isna().any():
+        raise RuntimeError("Failed to assign TSSC to synthetic rows: some rows still have NaN TSSC values.")
 
 
 # --------------------------------------------------------------------------- #
@@ -609,37 +698,32 @@ def clean_timestamps(
         ``rollover_head_index`` is the index of the rollover head if a rollover was detected, or ``None`` otherwise.
     """
 
-    if df.empty:
-        return df.copy(), None
+    try:
+        
+        df = _parse_datetime_stage(df)
 
-    df, parse_success = _parse_datetime_stage(df)
+        rollover_head_idx = _rollover_stage(df)
 
-    if not parse_success:
+        seam_idx: int | None = None
+        if rollover_head_idx is not None:
+            logger.info("Rotating dataframe to account for memory rollover.", rollover_head_index=rollover_head_idx)
+            seam_idx = len(df) - (rollover_head_idx + 1) # Position where the "old head" now begins post-rotation
+            df = _rotate_for_rollover(df, rollover_head_idx)
+
+        breaks = _detect_breaks(df, seam_idx)
+        windows = _detect_windows(df, breaks)
+        _resolve_and_shift(df, windows)
+
+        _compute_tssc(df)
+
+        before, after = _build_sentinels(df, windows, breaks)
+        result = _assemble(df, before, after)
+        _assign_sentinel_tssc(result)
+
+        _polish_result(result)
+
+        return result, rollover_head_idx
+
+    except Exception as e:
+        logger.error("Failed during timestamp cleaning process.", error=str(e))
         return None, None
-
-    rollover_detected, rollover_head_idx = _rollover_stage(df)
-
-    seam_idx: int | None = None
-    if rollover_detected:
-        logger.info("Rotating dataframe to account for memory rollover.", rollover_head_index=rollover_head_idx)
-        seam_idx = len(df) - (rollover_head_idx + 1) # Position where the "old head" now begins post-rotation
-        df = _rotate_for_rollover(df, rollover_head_idx)
-
-    breaks = _detect_breaks(df, seam_idx)
-    windows = _detect_windows(df, breaks)
-    _resolve_and_shift(df, windows)
-
-    tssc_computed = _compute_tssc(df)
-
-    if not tssc_computed:
-        return None, None
-
-    before, after = _build_sentinels(df, windows, breaks)
-    result = _assemble(df, before, after)
-
-    # for i, log in enumerate(result.itertuples(index=False)):
-    #     logger.debug("Post-cleaning log entry.", idx=i, counter=log.counter, datetime=log.datetime, event_id=log.event_id)
-
-    exit(0)
-
-    return df, rollover_head_idx
