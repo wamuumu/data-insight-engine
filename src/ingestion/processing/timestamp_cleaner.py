@@ -132,14 +132,19 @@ def _counter_gap(prev_counter: int, curr_counter: int) -> bool:
     return curr_counter != expected
 
 
-def _polish_result(df: pd.DataFrame):
+def _polish_result(df: pd.DataFrame, rollover_head_idx: int | None = None):
     """
-    Perform final polishing on the cleaned DataFrame, dropping unecessary columns.
+    Perform final polishing on the cleaned DataFrame.
 
     Args:
         df: The cleaned DataFrame to polish.
+        rollover_head_idx: The index of the rollover head, if any.
     """
     df.drop(columns=["counter", "description"], inplace=True)
+
+    df["rollover"] = False
+    if rollover_head_idx is not None:
+        df.loc[df.index[:rollover_head_idx + 1], "rollover"] = True
 
 # --------------------------------------------------------------------------- #
 # Stage 1 -- parsing
@@ -720,7 +725,7 @@ def clean_timestamps(
         result = _assemble(df, before, after)
         _assign_sentinel_tssc(result)
 
-        _polish_result(result)
+        _polish_result(result, rollover_head_idx)
 
         return result, rollover_head_idx
 

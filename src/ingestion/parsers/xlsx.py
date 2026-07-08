@@ -76,10 +76,6 @@ class XLSXParser(BaseParser):
             rollover_index=rollover_index,
         )
 
-        for log in cleaned_records.itertuples(index=False):
-            logger.debug("Cleaned record", record=log)
-        exit(0)
-
         firmware_lookup = build_firmware_lookup(cleaned_records)
 
         def record_generator():
@@ -87,9 +83,12 @@ class XLSXParser(BaseParser):
                 yield HistoryLogRecord(
                     source_file=str(file.path),
                     data={
+                        "event_date": row.date,
+                        "event_time": row.time,
                         "event_datetime": row.datetime,
                         "event_id": row.event_id,
                         "value": row.value,
+                        "tssc": row.tssc,
                         "firmware_version": firmware_lookup(idx),
                     },
                     is_rollover=row.rollover,
