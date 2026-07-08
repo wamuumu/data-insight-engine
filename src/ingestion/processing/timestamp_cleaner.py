@@ -92,8 +92,8 @@ def _make_synthetic_row(
     """
     return {
         "counter": pd.NA,
-        "date": pd.NA,
-        "time": pd.NA,
+        "date": dt.strftime("%d/%m/%Y"),
+        "time": dt.strftime("%H:%M:%S.%f"),
         "event_id": event_id,
         "description": event_id.name.replace("_", " "),
         "value": value,
@@ -140,7 +140,7 @@ def _polish_result(df: pd.DataFrame, rollover_head_idx: int | None = None):
         df: The cleaned DataFrame to polish.
         rollover_head_idx: The index of the rollover head, if any.
     """
-    df.drop(columns=["counter", "description"], inplace=True)
+    df.drop(columns=["counter", "date", "time", "description"], inplace=True)
 
     df["rollover"] = False
     if rollover_head_idx is not None:
@@ -151,27 +151,18 @@ def _polish_result(df: pd.DataFrame, rollover_head_idx: int | None = None):
 # --------------------------------------------------------------------------- #
 
 
-def _parse_datetime_stage(df: pd.DataFrame) -> pd.DataFrame:
+def _parse_datetime(df: pd.DataFrame):
     """
     Parse the 'date' and 'time' columns into a single 'datetime' column, handling errors gracefully.
 
     Args:
         df: DataFrame containing the log records.
-
-    Returns:
-        A DataFrame with the parsed datetime column.
     """
-
-    df = df.copy(deep=True).reset_index(drop=True)
-
     try:
         dt = pd.to_datetime(df["date"] + " " + df["time"], dayfirst=True, format="%d/%m/%Y %H:%M:%S.%f")
+        df["datetime"] = dt
     except Exception as e:
         raise ValueError("Failed to parse 'date' and 'time' columns into datetime.") from e
-
-    df["datetime"] = dt
-
-    return df
 
 
 # --------------------------------------------------------------------------- #
@@ -179,7 +170,7 @@ def _parse_datetime_stage(df: pd.DataFrame) -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 
 
-def _rollover_stage(df: pd.DataFrame) -> int | None:
+def _detect_rollover(df: pd.DataFrame) -> int | None:
     """
     Detect whether a rollover has occurred by identifying the HL Download event.
 
@@ -384,6 +375,11 @@ def _resolve_and_shift(df: pd.DataFrame, windows: list[Window]):
 
         for i in range(win.start_idx, win.end_idx + 1):
             df.at[i, "datetime"] += delta
+
+            if win.is_guessable:
+                # Update the date and time columns to reflect the new datetime
+                df.at[i, "date"] = df.at[i, "datetime"].strftime("%d/%m/%Y")
+                df.at[i, "time"] = df.at[i, "datetime"].strftime("%H:%M:%S.%f")[:-3]
         
         win.delta = delta
 
@@ -703,11 +699,13 @@ def clean_timestamps(
         ``rollover_head_index`` is the index of the rollover head if a rollover was detected, or ``None`` otherwise.
     """
 
+    df = df.copy(deep=True)  # Work on a copy to avoid mutating the original DataFrame
+
     try:
         
-        df = _parse_datetime_stage(df)
+        _parse_datetime(df)
 
-        rollover_head_idx = _rollover_stage(df)
+        rollover_head_idx = _detect_rollover(df)
 
         seam_idx: int | None = None
         if rollover_head_idx is not None:
@@ -725,6 +723,7 @@ def clean_timestamps(
         result = _assemble(df, before, after)
         _assign_sentinel_tssc(result)
 
+        _parse_datetime(result) # Recompute with updated values
         _polish_result(result, rollover_head_idx)
 
         return result, rollover_head_idx

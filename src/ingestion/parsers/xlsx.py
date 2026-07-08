@@ -83,15 +83,13 @@ class XLSXParser(BaseParser):
                 yield HistoryLogRecord(
                     source_file=str(file.path),
                     data={
-                        "event_date": row.date,
-                        "event_time": row.time,
-                        "event_datetime": row.datetime,
+                        "datetime": row.datetime,
                         "event_id": row.event_id,
                         "value": row.value,
                         "tssc": row.tssc,
+                        "rollover": row.rollover,
                         "firmware_version": firmware_lookup(idx),
-                    },
-                    is_rollover=row.rollover,
+                    }
                 )
 
         return HistoryLogStream(

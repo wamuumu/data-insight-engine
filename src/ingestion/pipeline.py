@@ -436,6 +436,16 @@ class IngestionPipeline:
 
         else:
             hl_records = parsed.records
+            # for log in hl_records:
+            #     logger.debug(
+            #         "Cleaned record",
+            #         dt=str(log.data["datetime"]),
+            #         event_id=log.data["event_id"],
+            #         value=log.data["value"],
+            #         tssc=log.data["tssc"],
+            #         rollover=log.data["rollover"],
+            #         fv=log.data["firmware_version"],
+            #     )
             rollover_index = parsed.rollover_index
             rollover_detected = parsed.rollover_index is not None
 

@@ -11,14 +11,13 @@ class HistoryLogRecord:
     __slots__ = ["source_file", "data", "is_rollover"]
 
     def __init__(
-        self, source_file: str, data: dict[str, Any], is_rollover: bool = False
+        self, source_file: str, data: dict[str, Any]
     ):
         self.source_file = source_file
         self.data = data
-        self.is_rollover = is_rollover
 
     def __repr__(self):
-        return f"HistoryLogRecord(source_file={self.source_file}, data={self.data}, is_rollover={self.is_rollover})"
+        return f"HistoryLogRecord(source_file={self.source_file}, data={self.data})"
 
 
 @dataclass
