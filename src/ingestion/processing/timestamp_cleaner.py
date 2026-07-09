@@ -146,10 +146,6 @@ def _polish_result(df: pd.DataFrame, rollover_head_idx: int | None = None):
     if rollover_head_idx is not None:
         df.loc[df.index[:rollover_head_idx + 1], "rollover"] = True
 
-# --------------------------------------------------------------------------- #
-# Stage 1 -- parsing
-# --------------------------------------------------------------------------- #
-
 
 def _parse_datetime(df: pd.DataFrame):
     """
