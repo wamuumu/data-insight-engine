@@ -35,20 +35,13 @@ class XLSXParser(BaseParser):
                 file.path, sheet_name=0, header=0, names=_COLUMNS, engine="openpyxl"
             )
         except Exception as e:
-            logger.error(
-                "Failed to read XLSX file into DataFrame",
-                path=str(file.path),
-                error=str(e),
-            )
-            raise
+            raise RuntimeError(f"Failed to read XLSX file: {file.path}") from e
 
         df = df.dropna(how="all")  # Drop rows where all elements are NaN
 
         if df.empty:
             logger.warning("XLSX file has no data rows", path=str(file.path))
-            return HistoryLogStream(
-                records=iter([]), rollover_index=None
-            )
+            return HistoryLogStream(records=iter([]), rollover_index=None)
 
         logger.debug(
             "XLSX file opened successfully",
@@ -60,16 +53,11 @@ class XLSXParser(BaseParser):
         cleaned_records, rollover_index = clean_timestamps(df)
 
         if cleaned_records is None:
-            logger.warning(
-                "Timestamp cleaning failed, returning empty record stream",
-                path=str(file.path),
-            )
-            return HistoryLogStream(
-                records=iter([]), rollover_index=None
-            )
+            logger.warning("Timestamp cleaning failed", path=str(file.path))
+            return HistoryLogStream(records=iter([]), rollover_index=None)
 
         logger.info(
-            "RTC timestamps cleaning completed",
+            "Timestamps cleaning completed",
             num_original_records=len(df),
             num_cleaned_records=len(cleaned_records),
             diff=len(cleaned_records) - len(df),
@@ -77,6 +65,13 @@ class XLSXParser(BaseParser):
         )
 
         firmware_lookup = build_firmware_lookup(cleaned_records)
+        firmware_versions = [firmware_lookup(idx) for idx in range(len(cleaned_records))]
+
+        if any(fv is None for fv in firmware_versions):
+            logger.warning("Firmware version lookup failed for some records", path=str(file.path))
+            return HistoryLogStream(records=iter([]), rollover_index=None)
+        
+        logger.info("Firmware version lookup completed", num_lookups=len(firmware_versions))
 
         def record_generator():
             for idx, row in enumerate(cleaned_records.itertuples(index=False)):
@@ -88,10 +83,8 @@ class XLSXParser(BaseParser):
                         "value": row.value,
                         "tssc": row.tssc,
                         "rollover": row.rollover,
-                        "firmware_version": firmware_lookup(idx),
+                        "firmware_version": firmware_versions[idx],
                     }
                 )
 
-        return HistoryLogStream(
-            records=record_generator(), rollover_index=rollover_index
-        )
+        return HistoryLogStream(records=record_generator(), rollover_index=rollover_index)

@@ -9,10 +9,16 @@ from common.logging import get_logger
 logger = get_logger(__name__)
 
 
-_UNDEFINED_FIRMWARE_VERSION = -1  # Sentinel value for undefined firmware version
-
-
 def _build_firmware_index(df: pd.DataFrame) -> list[tuple[int, int, int]]:
+    """
+    Build a list of switch events from the DataFrame, where each event is represented as a tuple of (row_index, event_id, firmware_value).
+    
+    Args:
+        df (pd.DataFrame): The DataFrame containing event data.
+    
+    Returns:
+        list[tuple[int, int, int]]: A list of tuples where each tuple contains (row_index, event_id, firmware_value) for switch events.
+    """
     switch_events: list[tuple[int, int, int]] = []
 
     if "event_id" not in df.columns or "value" not in df.columns:
@@ -38,7 +44,17 @@ def _build_firmware_index(df: pd.DataFrame) -> list[tuple[int, int, int]]:
 def _partition_firmware_regions(
     switch_events: list[tuple[int, int, int]], 
     total_rows: int
-) -> list[tuple[int, int, int]]:
+) -> list[tuple[int, int, int | None]]:
+    """
+    Partition the DataFrame into segments based on switch events and their corresponding firmware versions.
+
+    Args:
+        switch_events (list[tuple[int, int, int]]): A list of tuples where each tuple contains (row_index, event_id, firmware_value).
+        total_rows (int): Total number of rows in the DataFrame.
+    
+    Returns:
+        list[tuple[int, int, int]]: A list of segments where each segment is represented as a tuple (start_index, end_index, firmware_version).
+    """
     segments: list[tuple[int, int, int]] = []
     pending_start = 0
     last_type: int | None = None
@@ -92,7 +108,7 @@ def _partition_firmware_regions(
             )
 
     firmware_to_use = (
-        last_firmware if last_firmware is not None else _UNDEFINED_FIRMWARE_VERSION
+        last_firmware if last_firmware is not None else None
     )
     if total_rows > 0 and pending_start <= total_rows - 1:
         close_segment(total_rows - 1, firmware_to_use)
@@ -103,20 +119,48 @@ def _partition_firmware_regions(
 def _create_firmware_resolver(
     segments: list[tuple[int, int, int]],
 ) -> Callable[[int], int | None]:
+    """
+    Create a firmware resolver function based on the provided segments.
+
+    Args:
+        segments (list[tuple[int, int, int]]): A list of tuples where each tuple contains (start_index, end_index, firmware_version).
+    
+    Returns:
+        Callable[[int], int | None]: A function that takes a row index and returns the corresponding firmware version, or None if not found.
+    """
     starts = [s for s, _, _ in segments]
     ends = [e for _, e, _ in segments]
     firmwares = [f for _, _, f in segments]
 
-    def lookup(row_index: int) -> int:
+    def lookup(row_index: int) -> int | None:
+        if not starts:
+            return None
+        
         pos = bisect.bisect_right(starts, row_index) - 1
         if pos >= 0 and row_index <= ends[pos]:
             return firmwares[pos]
-        return _UNDEFINED_FIRMWARE_VERSION
+
+        if pos < 0 or pos == len(segments) - 1:
+            return None
+        
+        distance_to_prev_end = row_index - ends[pos]
+        distance_to_next_start = starts[pos + 1] - row_index
+        return firmwares[pos] if distance_to_prev_end <= distance_to_next_start else firmwares[pos + 1]
 
     return lookup
 
 
 def build_firmware_lookup(df: pd.DataFrame) -> Callable[[int], int | None]:
+    """
+    Build a row-position-based firmware resolver for the given DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame containing event data.
+    
+    Returns:
+        Callable[[int], int | None]: A function that takes a row index and returns the
+        corresponding firmware version, or None if not found.
+    """
     switch_events = _build_firmware_index(df)
     segments = _partition_firmware_regions(switch_events, len(df))
     firmware_lookup = _create_firmware_resolver(segments)
