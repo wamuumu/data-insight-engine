@@ -294,7 +294,7 @@ def _detect_breaks(df: pd.DataFrame, seam_idx: int | None) -> list[Break]:
                 position=i
             ))
     
-    logger.debug(f"Detected {len(breaks)} breaks in the log stream:")
+    logger.debug(f"Detected {len(breaks)} breaks in the log stream")
     for b in breaks:
         logger.debug(f"  {b.kind.name} (position {b.position})")
 
@@ -359,7 +359,7 @@ def _detect_windows(df: pd.DataFrame, breaks: list[Break]) -> list[Window]:
         )
         i = end_idx + 1
 
-    logger.debug(f"Detected {len(windows)} contiguous windows of epoch-year logs:")
+    logger.debug(f"Detected {len(windows)} contiguous windows of epoch-year logs")
     for win in windows:
         logger.debug(f"  start={win.start_idx}, end={win.end_idx}, is_guessable={win.is_guessable}")
 
@@ -524,12 +524,14 @@ def _build_sentinels(
         )
         _bucket_add(after, win.end_idx, row)
     
-    logger.debug(f"Detected sentinels to insert before:")
+    before_length = sum(len(rows) for rows in before.values())
+    logger.debug(f"Detected {before_length} sentinels to insert before windows")
     for position in sorted(before):
         for priority, row in before[position]:
             logger.debug(f"    {EventID(row['event_id']).name} (position {position}) (priority {priority})")
 
-    logger.debug(f"Detected sentinels to insert after:")
+    after_length = sum(len(rows) for rows in after.values())
+    logger.debug(f"Detected {after_length} sentinels to insert after windows")
     for position in sorted(after):
         for priority, row in after[position]:
             logger.debug(f"    {EventID(row['event_id']).name} (position {position}) (priority {priority})")
