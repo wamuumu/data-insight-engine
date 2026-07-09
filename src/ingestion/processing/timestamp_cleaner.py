@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import IntEnum
+from scipy.optimize import isotonic_regression
 
 import pandas as pd
 
@@ -78,7 +79,8 @@ class Window:
 def _make_synthetic_row(
     dt: datetime, 
     event_id: EventID, 
-    value: int
+    value: int,
+    tssc: int
 ) -> dict:
     """
     Construct a synthetic sentinel row dictionary with the specified parameters.
@@ -87,6 +89,7 @@ def _make_synthetic_row(
         dt: The datetime for the synthetic row.
         event_id: The EventID for the synthetic row.
         value: The value associated with the synthetic row.
+        tssc: The TSSC value for the synthetic row.
     Returns:
         A dictionary representing the synthetic sentinel row.
     """
@@ -98,7 +101,7 @@ def _make_synthetic_row(
         "description": event_id.name.replace("_", " "),
         "value": value,
         "datetime": dt,
-        "tssc": pd.NA,
+        "tssc": tssc,
     }
 
 
@@ -159,6 +162,28 @@ def _parse_datetime(df: pd.DataFrame):
         df["datetime"] = dt
     except Exception as e:
         raise ValueError("Failed to parse 'date' and 'time' columns into datetime.") from e
+
+
+def _strictly_increasing(values: list[float]) -> list[int]:
+    """
+    Nudge a non-decreasing sequence into a strictly increasing one of ints.
+
+    Args:
+        values: A list of float values to be adjusted.
+    
+    Returns:
+        A list of int values that are strictly increasing.
+    """
+    if not values:
+        return []
+    
+    out = [int(round(values[0]))]
+
+    for v in values[1:]:
+        rounded = int(round(v))
+        out.append(max(rounded, out[-1] + 1))
+    
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -375,7 +400,7 @@ def _resolve_and_shift(df: pd.DataFrame, windows: list[Window]):
             if win.is_guessable:
                 # Update the date and time columns to reflect the new datetime
                 df.at[i, "date"] = df.at[i, "datetime"].strftime("%d/%m/%Y")
-                df.at[i, "time"] = df.at[i, "datetime"].strftime("%H:%M:%S.%f")[:-3]
+                df.at[i, "time"] = df.at[i, "datetime"].strftime("%H:%M:%S.%f")
         
         win.delta = delta
 
@@ -436,7 +461,8 @@ def _build_sentinels(
             row = _make_synthetic_row(
                 dt=prev_dt + _TIMEDELTA_OFFSET_MILLIS,
                 event_id=EventID.RTC_RESET,
-                value=_SENTINEL_VALUE
+                value=_SENTINEL_VALUE,
+                tssc=int(df.at[i - 1, "tssc"]) + 1
             )
         else:
             curr_dt = df.at[i, "datetime"]
@@ -444,7 +470,8 @@ def _build_sentinels(
             row = _make_synthetic_row(
                 dt=curr_dt - _TIMEDELTA_OFFSET_MILLIS,
                 event_id=EventID.MISS_LOGS,
-                value=curr_counter
+                value=curr_counter,
+                tssc=int(df.at[i, "tssc"]) - 1
             )
         
         _bucket_add(before, i, row)
@@ -458,7 +485,8 @@ def _build_sentinels(
             row = _make_synthetic_row(
                 dt=start_dt - _TIMEDELTA_OFFSET_MILLIS,
                 event_id=EventID.RTC_GUESS,
-                value=_SENTINEL_VALUE
+                value=_SENTINEL_VALUE,
+                tssc=int(df.at[win.start_idx, "tssc"]) - 1
             )
             _bucket_add(before, win.start_idx, row)
             continue
@@ -467,26 +495,32 @@ def _build_sentinels(
 
         if win.start_idx == 0:
             miss_start_dt = df.at[0, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
+            miss_start_tssc = int(df.at[0, "tssc"]) - 1
         else:
             miss_start_dt = df.at[win.start_idx - 1, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
-        
+            miss_start_tssc = int(df.at[win.start_idx - 1, "tssc"]) + 1
+
         row = _make_synthetic_row(
             dt=miss_start_dt,
             event_id=EventID.RTC_MISS_START,
-            value=_SENTINEL_VALUE
+            value=_SENTINEL_VALUE,
+            tssc=miss_start_tssc
         )
         _bucket_add(before, win.start_idx, row)
 
         if win.end_idx + 1 >= n:
             # EOF reached
             miss_end_dt = df.at[win.end_idx, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
+            miss_end_tssc = int(df.at[win.end_idx, "tssc"]) + 1
         else:
             miss_end_dt = df.at[win.end_idx + 1, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
+            miss_end_tssc = int(df.at[win.end_idx + 1, "tssc"]) - 1
         
         row = _make_synthetic_row(
             dt=miss_end_dt,
             event_id=EventID.RTC_MISS_END,
-            value=_SENTINEL_VALUE
+            value=_SENTINEL_VALUE,
+            tssc=miss_end_tssc
         )
         _bucket_add(after, win.end_idx, row)
     
@@ -587,91 +621,59 @@ def _compute_tssc(df: pd.DataFrame, seam_idx: int | None = None):
         raise AssertionError("TSSC computation failed: some rows have NaN TSSC values.")
 
 
-def _assign_sentinel_tssc(df: pd.DataFrame):
+def _repair_sentinel_tssc(df: pd.DataFrame):
     """
-    Assign TSSC values to every synthetic row (sentinel) inserted by the cleaning process.
+    Repair the TSSC values for synthetic rows (sentinels) in the DataFrame.
 
     Args:
         df: DataFrame containing the log records, including synthetic rows.
+
+    Returns:
+        A DataFrame with repaired TSSC values for synthetic rows.
     """
-    if df["tssc"].notna().all():
-        return
-
     n = len(df)
-    tssc = df["tssc"].to_numpy(copy=True)
+    is_sentinel = df["counter"].isna().to_numpy()
 
-    for i in range(n):
+    if not is_sentinel.any():
+        return df
 
-        if pd.notna(tssc[i]):
+    tssc = df["tssc"].to_numpy(dtype="float64", copy=True)
+
+    i = 0
+    while i < n:
+        if not is_sentinel[i]:
+            i += 1
             continue
 
-        prev_real = None
-        next_real = None
+        j = i
+        while j < n and is_sentinel[j]:
+            j += 1
+        run_len = j - i
 
-        if i > 0 and pd.notna(tssc[i - 1]):
-            prev_real = i - 1
+        run_values = tssc[i:j].tolist()
+        if run_len > 1 and run_values != sorted(run_values):
+            run_values = isotonic_regression(run_values).x.tolist()
 
-        if i + 1 < n and pd.notna(tssc[i + 1]):
-            next_real = i + 1
+        lo = tssc[i - 1] if i > 0 else None
+        hi = tssc[j] if j < n else None
 
-        if prev_real is None and next_real is None:
-            raise RuntimeError("Cannot assign TSSC to sentinel: no real neighbours found.")
+        repaired = _strictly_increasing(run_values)
 
-        anchor = None
-        if (
-            prev_real is not None
-            and df.at[i, "datetime"] == df.at[prev_real, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
-        ):
-            anchor = prev_real
+        if lo is not None and repaired[0] <= lo:
+            repaired[0] = int(lo) + 1
+            repaired = _strictly_increasing([float(v) for v in repaired])
 
-        elif (
-            next_real is not None
-            and df.at[i, "datetime"] == df.at[next_real, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
-        ):
-            anchor = next_real
+        if hi is not None and repaired[-1] >= hi:
+            logger.warning("Repaired TSSC values exceed the next known TSSC value, adjusting to fit within bounds.")
+            base = lo if lo is not None else hi - (run_len + 1)
+            repaired = [int(base) + (k + 1) for k in range(run_len)]
 
-        elif prev_real is not None and next_real is None:
-            anchor = prev_real
+        for offset, value in enumerate(repaired):
+            tssc[i + offset] = value
 
-        elif next_real is not None and prev_real is None:
-            anchor = next_real
-
-        else:
-            # Fallback
-            prev_delta = abs((df.at[i, "datetime"] - df.at[prev_real, "datetime"]).total_seconds())
-            next_delta = abs((df.at[next_real, "datetime"] - df.at[i, "datetime"]).total_seconds())
-
-            anchor = prev_real if prev_delta <= next_delta else next_real
-
-        anchor_tssc = int(tssc[anchor])
-
-        if anchor == prev_real:
-            value = anchor_tssc + 1
-        else:
-            value = anchor_tssc - 1
-
-        if anchor == prev_real:
-
-            j = i - 1
-            while j >= 0 and pd.isna(df.at[j, "tssc"]):
-                j -= 1
-
-            value = max(value, anchor_tssc + (i - anchor))
-
-        else:
-
-            j = i + 1
-            while j < n and pd.isna(df.at[j, "tssc"]):
-                j += 1
-
-            value = min(value, anchor_tssc - (anchor - i))
-
-        tssc[i] = value
+        i = j
 
     df["tssc"] = tssc.astype("int64")
-
-    if df["tssc"].isna().any():
-        raise RuntimeError("Failed to assign TSSC to synthetic rows: some rows still have NaN TSSC values.")
 
 
 # --------------------------------------------------------------------------- #
@@ -717,7 +719,7 @@ def clean_timestamps(
 
         before, after = _build_sentinels(df, windows, breaks)
         result = _assemble(df, before, after)
-        _assign_sentinel_tssc(result)
+        _repair_sentinel_tssc(result)
 
         _parse_datetime(result) # Recompute with updated values
         _polish_result(result, rollover_head_idx)
