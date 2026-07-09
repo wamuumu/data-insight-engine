@@ -147,7 +147,7 @@ def _polish_result(df: pd.DataFrame, rollover_head_idx: int | None = None):
 
     df["rollover"] = False
     if rollover_head_idx is not None:
-        df.loc[df.index[:rollover_head_idx + 1], "rollover"] = True
+        df.loc[len(df) - (rollover_head_idx + 1):, "rollover"] = True
 
 
 def _parse_datetime(df: pd.DataFrame):
@@ -606,7 +606,7 @@ def _compute_tssc(df: pd.DataFrame, seam_idx: int | None = None):
             if _counter_gap(prev_counter, counter):
                 is_truncated = True
 
-        if event_id in _SESSION_START_EVENTS or is_truncated:
+        if i == 0 or event_id in _SESSION_START_EVENTS or is_truncated:
             session_start_dt = dt
 
         if session_start_dt is None:
@@ -715,7 +715,7 @@ def clean_timestamps(
         windows = _detect_windows(df, breaks)
         _resolve_and_shift(df, windows)
 
-        _compute_tssc(df)
+        _compute_tssc(df, seam_idx)
 
         before, after = _build_sentinels(df, windows, breaks)
         result = _assemble(df, before, after)
