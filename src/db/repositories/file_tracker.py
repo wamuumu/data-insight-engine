@@ -61,18 +61,20 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
 
         return result
 
-    def mark_processing(self, session: Session, tracker: FileTracker):
+    def mark_processing(self, session: Session, tracker_id: int):
         """
         Update the given FileTracker record to mark it as 'processing' and set the started_at timestamp.
         """
+        tracker = session.get(FileTracker, tracker_id)
         tracker.status = FileStatus.PROCESSING
         logger.info("File processing started", file_path=tracker.file_path)
         session.flush()
 
-    def mark_done(self, session: Session, tracker: FileTracker, rows_inserted: int):
+    def mark_done(self, session: Session, tracker_id: int, rows_inserted: int):
         """
         Update the given FileTracker record to mark it as 'done', set the finished_at timestamp, and update row counts.
         """
+        tracker = session.get(FileTracker, tracker_id)
         tracker.status = FileStatus.DONE
         logger.info(
             "File processing completed",
@@ -81,10 +83,11 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         )
         session.flush()
 
-    def mark_failed(self, session: Session, tracker: FileTracker, error_message: str):
+    def mark_failed(self, session: Session, tracker_id: int, error_message: str):
         """
         Update the given FileTracker record to mark it as 'failed', set the finished_at timestamp, and record the error message.
         """
+        tracker = session.get(FileTracker, tracker_id)
         tracker.status = FileStatus.FAILED
         logger.error(
             "File processing failed",

@@ -42,10 +42,6 @@ class Settings(BaseSettings):
     workers: int = Field(
         default=4, description="Number of parallel workers for file ingestion"
     )
-    db_retry_attempts: int = Field(
-        default=4,
-        description="Number of retry attempts for database operations on failure",
-    )
     db_retry_initial_delay: float = Field(
         default=0.5,
         description="Initial delay in seconds before retrying a failed database operation",
@@ -54,13 +50,9 @@ class Settings(BaseSettings):
         default=8.0,
         description="Maximum delay in seconds between retries for database operations",
     )
-    file_retry_timeout: float = Field(
+    db_retry_timeout: float = Field(
         default=300,
         description="Maximum time in seconds to retry processing a file before giving up",
-    )
-    max_batch_split_depth: int = Field(
-        default=10,
-        description="Maximum depth to split large batches for insertion into the database",
     )
 
     # ── Scheduler ──────────────────────────────────────────────

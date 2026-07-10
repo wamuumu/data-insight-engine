@@ -7,7 +7,7 @@ class MetricStatus(StrEnum):
     SUCCESS = "success"
     FAILURE = "failure"
     INCOMPLETE = "incomplete"
-    DEDUPLICATED = "deduplicated"
+    DUPLICATE = "duplicate"
 
 
 # ── File-level counters ───────────────────────────────────────

@@ -18,16 +18,27 @@ def extract_date(path: Path) -> date | None:
     """
     Extract the date from the file path using a regex pattern.
     """
-    _DATE_PATTERN = re.compile(r"(?P<ymd>\d{4}-\d{2}-\d{2})|(?P<dmy>\d{2}-\d{2}-\d{2})")
+    _DATE_PATTERN = re.compile(r"\b\d{2,4}-\d{2}-\d{2,4}\b")
+    _DATE_FORMATS = (
+        "%Y-%m-%d",  # YYYY-MM-DD
+        "%y-%m-%d",  # YY-MM-DD
+        "%d-%m-%Y",  # DD-MM-YYYY
+        "%d-%m-%y",  # DD-MM-YY
+    )
     match = _DATE_PATTERN.search(str(path))
     
     if not match:
         return None
+    
+    value = match.group()
 
-    if match.group("ymd"):
-        return datetime.strptime(match.group("ymd"), "%Y-%m-%d").date()
-
-    return datetime.strptime(match.group("dmy"), "%d-%m-%y").date()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    
+    return None
 
 
 def compute_sha256(path: Path) -> bytes | None:
@@ -44,25 +55,3 @@ def compute_sha256(path: Path) -> bytes | None:
         return sha256_hash.digest()
     except OSError:
         return None
-
-
-def combine_date_time(
-    date_str: str, time_str: str, format_str: str = "%d/%m/%Y %H:%M:%S.%f"
-) -> datetime:
-    """
-    Combine date and time strings into a single datetime object.
-    """
-    try:
-        dt = datetime.strptime(f"{date_str} {time_str}", format_str)
-    except ValueError:
-        dt = datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M:%S")
-
-    return dt.replace(tzinfo=timezone.utc)
-
-
-def construct_time(hour: int, minute: int, second: int, centisecond: int) -> time:
-    """
-    Construct a datetime.time object from hour, minute, second, and centisecond components.
-    """
-    microsecond = min(max(centisecond, 0), 99) * 10_000
-    return time(hour=hour, minute=minute, second=second, microsecond=microsecond)

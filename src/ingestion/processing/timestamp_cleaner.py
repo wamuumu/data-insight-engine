@@ -80,7 +80,8 @@ def _make_synthetic_row(
     dt: datetime, 
     event_id: EventID, 
     value: int,
-    tssc: int
+    tssc: int,
+    rollover: bool
 ) -> dict:
     """
     Construct a synthetic sentinel row dictionary with the specified parameters.
@@ -90,6 +91,7 @@ def _make_synthetic_row(
         event_id: The EventID for the synthetic row.
         value: The value associated with the synthetic row.
         tssc: The TSSC value for the synthetic row.
+        rollover: Whether the synthetic row is part of the rollover segment.
     Returns:
         A dictionary representing the synthetic sentinel row.
     """
@@ -102,6 +104,7 @@ def _make_synthetic_row(
         "value": value,
         "datetime": dt,
         "tssc": tssc,
+        "rollover": rollover,
     }
 
 
@@ -135,19 +138,14 @@ def _counter_gap(prev_counter: int, curr_counter: int) -> bool:
     return curr_counter != expected
 
 
-def _polish_result(df: pd.DataFrame, rollover_head_idx: int | None = None):
+def _polish_result(df: pd.DataFrame) -> None:
     """
     Perform final polishing on the cleaned DataFrame.
 
     Args:
         df: The cleaned DataFrame to polish.
-        rollover_head_idx: The index of the rollover head, if any.
     """
     df.drop(columns=["counter", "date", "time", "description"], inplace=True)
-
-    df["rollover"] = False
-    if rollover_head_idx is not None:
-        df.loc[len(df) - (rollover_head_idx + 1):, "rollover"] = True
 
 
 def _parse_datetime(df: pd.DataFrame):
@@ -234,6 +232,9 @@ def _rotate_for_rollover(df: pd.DataFrame, rollover_head_idx: int) -> pd.DataFra
     Returns:
         A new DataFrame with the rows after the rollover head moved to the front.
     """
+    df["rollover"] = False
+    df.loc[(rollover_head_idx + 1):, "rollover"] = True
+
     return pd.concat(
         [
             df.iloc[rollover_head_idx + 1:],
@@ -462,7 +463,8 @@ def _build_sentinels(
                 dt=prev_dt + _TIMEDELTA_OFFSET_MILLIS,
                 event_id=EventID.RTC_RESET,
                 value=_SENTINEL_VALUE,
-                tssc=int(df.at[i - 1, "tssc"]) + 1
+                tssc=int(df.at[i - 1, "tssc"]) + 1,
+                rollover=df.at[i - 1, "rollover"]
             )
         else:
             curr_dt = df.at[i, "datetime"]
@@ -471,7 +473,8 @@ def _build_sentinels(
                 dt=curr_dt - _TIMEDELTA_OFFSET_MILLIS,
                 event_id=EventID.MISS_LOGS,
                 value=curr_counter,
-                tssc=int(df.at[i, "tssc"]) - 1
+                tssc=int(df.at[i, "tssc"]) - 1,
+                rollover=df.at[i, "rollover"]
             )
         
         _bucket_add(before, i, row)
@@ -486,7 +489,8 @@ def _build_sentinels(
                 dt=start_dt - _TIMEDELTA_OFFSET_MILLIS,
                 event_id=EventID.RTC_GUESS,
                 value=_SENTINEL_VALUE,
-                tssc=int(df.at[win.start_idx, "tssc"]) - 1
+                tssc=int(df.at[win.start_idx, "tssc"]) - 1,
+                rollover=df.at[win.start_idx, "rollover"]
             )
             _bucket_add(before, win.start_idx, row)
             continue
@@ -496,15 +500,18 @@ def _build_sentinels(
         if win.start_idx == 0:
             miss_start_dt = df.at[0, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
             miss_start_tssc = int(df.at[0, "tssc"]) - 1
+            miss_start_rollover = df.at[0, "rollover"]
         else:
             miss_start_dt = df.at[win.start_idx - 1, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
             miss_start_tssc = int(df.at[win.start_idx - 1, "tssc"]) + 1
+            miss_start_rollover = df.at[win.start_idx - 1, "rollover"]
 
         row = _make_synthetic_row(
             dt=miss_start_dt,
             event_id=EventID.RTC_MISS_START,
             value=_SENTINEL_VALUE,
-            tssc=miss_start_tssc
+            tssc=miss_start_tssc,
+            rollover=miss_start_rollover
         )
         _bucket_add(before, win.start_idx, row)
 
@@ -512,15 +519,18 @@ def _build_sentinels(
             # EOF reached
             miss_end_dt = df.at[win.end_idx, "datetime"] + _TIMEDELTA_OFFSET_MILLIS
             miss_end_tssc = int(df.at[win.end_idx, "tssc"]) + 1
+            miss_end_rollover = df.at[win.end_idx, "rollover"]
         else:
             miss_end_dt = df.at[win.end_idx + 1, "datetime"] - _TIMEDELTA_OFFSET_MILLIS
             miss_end_tssc = int(df.at[win.end_idx + 1, "tssc"]) - 1
+            miss_end_rollover = df.at[win.end_idx + 1, "rollover"]
         
         row = _make_synthetic_row(
             dt=miss_end_dt,
             event_id=EventID.RTC_MISS_END,
             value=_SENTINEL_VALUE,
-            tssc=miss_end_tssc
+            tssc=miss_end_tssc,
+            rollover=miss_end_rollover
         )
         _bucket_add(after, win.end_idx, row)
     
