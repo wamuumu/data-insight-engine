@@ -709,7 +709,7 @@ def clean_timestamps(
 
         seam_idx: int | None = None
         if rollover_head_idx is not None:
-            logger.info("Rotating dataframe to account for memory rollover.", rollover_head_index=rollover_head_idx)
+            logger.debug("Rotating dataframe to account for memory rollover.", rollover_head_index=rollover_head_idx)
             seam_idx = len(df) - (rollover_head_idx + 1) # Position where the "old head" now begins post-rotation
             df = _rotate_for_rollover(df, rollover_head_idx)
 
