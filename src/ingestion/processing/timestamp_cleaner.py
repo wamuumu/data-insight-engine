@@ -232,6 +232,8 @@ def _rotate_for_rollover(df: pd.DataFrame, rollover_head_idx: int) -> pd.DataFra
     Returns:
         A new DataFrame with the rows after the rollover head moved to the front.
     """
+    logger.debug("Rotating dataframe to account for memory rollover.", rollover_head_index=rollover_head_idx)
+
     df["rollover"] = False
     df.loc[(rollover_head_idx + 1):, "rollover"] = True
 
@@ -249,13 +251,12 @@ def _rotate_for_rollover(df: pd.DataFrame, rollover_head_idx: int) -> pd.DataFra
 # --------------------------------------------------------------------------- #
 
 
-def _detect_breaks(df: pd.DataFrame, seam_idx: int | None) -> list[Break]:
+def _detect_breaks(df: pd.DataFrame) -> list[Break]:
     """
     Detect breaks in the log stream, which are discontinuities in the timestamps or counters.
 
     Args:
         df: DataFrame containing the log records.
-        seam_idx: The index of the rollover seam, if any.
     
     Returns:
         A list of Break objects representing the detected breaks.
@@ -264,9 +265,6 @@ def _detect_breaks(df: pd.DataFrame, seam_idx: int | None) -> list[Break]:
     n = len(df)
 
     for i in range(1, n):
-        if i == seam_idx:
-            # Skip the seam index, as it is a known discontinuity due to rollover.
-            continue
 
         prev_dt = df.at[i - 1, "datetime"]
         curr_dt = df.at[i, "datetime"]
@@ -595,13 +593,12 @@ def _assemble(
 # --------------------------------------------------------------------------- #
 
 
-def _compute_tssc(df: pd.DataFrame, seam_idx: int | None = None):
+def _compute_tssc(df: pd.DataFrame):
     """
     Calculate the Timestamp Session Start + Counter (TSSC) for each row in the DataFrame.
 
     Args:
         df: DataFrame containing the log records.
-        seam_idx: Index of the seam row, if applicable.
     """
     session_start_dt: datetime | None = None
 
@@ -613,10 +610,8 @@ def _compute_tssc(df: pd.DataFrame, seam_idx: int | None = None):
         dt = row["datetime"]
         
         is_truncated = False
-        if i > 0 and i != seam_idx:
-            prev_counter = df.at[i - 1, "counter"]
-            if _counter_gap(prev_counter, counter):
-                is_truncated = True
+        if i > 0 and _counter_gap(df.at[i - 1, "counter"], counter):
+            is_truncated = True
 
         if i == 0 or event_id in _SESSION_START_EVENTS or is_truncated:
             session_start_dt = dt
@@ -695,7 +690,7 @@ def _repair_sentinel_tssc(df: pd.DataFrame):
 
 def clean_timestamps(
         df: pd.DataFrame
-) -> tuple[pd.DataFrame | None, int | None]:
+) -> pd.DataFrame | None:
     """
     Orchestrate the entire timestamp cleaning process, including parsing, rollover detection,
     break detection, window detection, resolution, and sentinel insertion.
@@ -704,9 +699,7 @@ def clean_timestamps(
         df: DataFrame containing the log records.
     
     Returns:
-        A tuple ``(cleaned_df, rollover_head_index)``, where
-        ``cleaned_df`` is a cleaned deepcopy of the DataFrame with corrected timestamps and inserted sentinels, and
-        ``rollover_head_index`` is the index of the rollover head if a rollover was detected, or ``None`` otherwise.
+        A cleaned deepcopy of the DataFrame with corrected timestamps and inserted sentinels, or ``None`` if the process failed.
     """
 
     df = df.copy(deep=True)  # Work on a copy to avoid mutating the original DataFrame
@@ -717,27 +710,24 @@ def clean_timestamps(
 
         rollover_head_idx = _detect_rollover(df)
 
-        seam_idx: int | None = None
         if rollover_head_idx is not None:
-            logger.debug("Rotating dataframe to account for memory rollover.", rollover_head_index=rollover_head_idx)
-            seam_idx = len(df) - (rollover_head_idx + 1) # Position where the "old head" now begins post-rotation
             df = _rotate_for_rollover(df, rollover_head_idx)
 
-        breaks = _detect_breaks(df, seam_idx)
+        breaks = _detect_breaks(df)
         windows = _detect_windows(df, breaks)
         _resolve_and_shift(df, windows)
 
-        _compute_tssc(df, seam_idx)
+        _compute_tssc(df)
 
         before, after = _build_sentinels(df, windows, breaks)
         result = _assemble(df, before, after)
         _repair_sentinel_tssc(result)
 
         _parse_datetime(result) # Recompute with updated values
-        _polish_result(result, rollover_head_idx)
+        _polish_result(result)
 
-        return result, rollover_head_idx
+        return result
 
     except Exception as e:
         logger.error("Failed during timestamp cleaning process.", error=str(e))
-        return None, None
+        return None
