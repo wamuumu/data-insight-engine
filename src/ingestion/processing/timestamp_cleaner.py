@@ -690,7 +690,7 @@ def _repair_sentinel_tssc(df: pd.DataFrame):
 
 def clean_timestamps(
         df: pd.DataFrame
-) -> pd.DataFrame | None:
+) -> pd.DataFrame:
     """
     Orchestrate the entire timestamp cleaning process, including parsing, rollover detection,
     break detection, window detection, resolution, and sentinel insertion.
@@ -699,35 +699,29 @@ def clean_timestamps(
         df: DataFrame containing the log records.
     
     Returns:
-        A cleaned deepcopy of the DataFrame with corrected timestamps and inserted sentinels, or ``None`` if the process failed.
+        A new DataFrame with cleaned timestamps and inserted sentinel rows.
     """
 
     df = df.copy(deep=True)  # Work on a copy to avoid mutating the original DataFrame
 
-    try:
-        
-        _parse_datetime(df)
+    _parse_datetime(df)
 
-        rollover_head_idx = _detect_rollover(df)
+    rollover_head_idx = _detect_rollover(df)
 
-        if rollover_head_idx is not None:
-            df = _rotate_for_rollover(df, rollover_head_idx)
+    if rollover_head_idx is not None:
+        df = _rotate_for_rollover(df, rollover_head_idx)
 
-        breaks = _detect_breaks(df)
-        windows = _detect_windows(df, breaks)
-        _resolve_and_shift(df, windows)
+    breaks = _detect_breaks(df)
+    windows = _detect_windows(df, breaks)
+    _resolve_and_shift(df, windows)
 
-        _compute_tssc(df)
+    _compute_tssc(df)
 
-        before, after = _build_sentinels(df, windows, breaks)
-        result = _assemble(df, before, after)
-        _repair_sentinel_tssc(result)
+    before, after = _build_sentinels(df, windows, breaks)
+    result = _assemble(df, before, after)
+    _repair_sentinel_tssc(result)
 
-        _parse_datetime(result) # Recompute with updated values
-        _polish_result(result)
+    _parse_datetime(result) # Recompute with updated values
+    _polish_result(result)
 
-        return result
-
-    except Exception as e:
-        logger.error("Failed during timestamp cleaning process.", error=str(e))
-        return None
+    return result

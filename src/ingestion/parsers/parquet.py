@@ -51,16 +51,13 @@ class ParquetParser(BaseParser):
             size_mb=round(file.size / 1e6, 2),
         )
 
-        try:
-            df = pd.read_parquet(file.path, engine="pyarrow")
-        except Exception as e:
-            logger.error(
-                "Failed to read Parquet file", path=str(file.path), error=str(e)
-            )
-            raise
+        df = pd.read_parquet(file.path, engine="pyarrow")
+
+        if df.empty:
+            raise ValueError("Parquet file has no data rows.")
 
         logger.debug(
-            "Parquet file metadata",
+            "Parquet file opened successfully",
             path=str(file.path),
             num_rows=len(df),
             columns=list(df.columns),

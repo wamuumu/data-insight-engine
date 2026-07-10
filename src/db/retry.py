@@ -3,6 +3,7 @@ from __future__ import annotations
 from time import monotonic, sleep
 from typing import Callable, TypeVar
 
+import sqlalchemy.exc as sql_exc
 from sqlalchemy.orm import Session, sessionmaker
 
 from common.logging import get_logger
@@ -13,6 +14,14 @@ logger = get_logger(__name__)
 settings = load_settings()
 
 T = TypeVar("T")
+
+
+_NON_RETRYABLE_ERRORS = (
+    sql_exc.IntegrityError,
+    sql_exc.DataError,
+    sql_exc.ProgrammingError,
+    sql_exc.StatementError,
+)
 
 
 class DbRetryTimeout(RuntimeError):
@@ -46,6 +55,8 @@ def with_db_retry(
         try:
             with get_db_session(session_factory) as session:
                 return fn(session)
+        except _NON_RETRYABLE_ERRORS:
+            raise
         except Exception as e:
             delay = min(
                 settings.db_retry_max_delay,

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any, Iterator
 
 
@@ -18,16 +17,6 @@ class HistoryLogRecord:
 
     def __repr__(self):
         return f"HistoryLogRecord(source_file={self.source_file}, data={self.data})"
-
-
-@dataclass
-class HistoryLogStream:
-    """
-    Container for a stream of history log records, along with additional information.
-    """
-
-    records: Iterator[HistoryLogRecord]
-    rollover_index: int | None
 
 
 class SpecialEventRecord:
@@ -58,7 +47,7 @@ class BaseParser(ABC):
         ...
 
     @abstractmethod
-    def parse(self, file: Any) -> HistoryLogStream | SpecialEventRecord:
+    def parse(self, file: Any) -> Iterator[HistoryLogRecord] | SpecialEventRecord:
         """
         Parse the given file and yield either history log records or a special event record.
         """
