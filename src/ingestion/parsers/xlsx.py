@@ -93,7 +93,6 @@ class XLSXParser(BaseParser):
                     "event_id": row.event_id,
                     "value": row.value,
                     "tssc": row.tssc,
-                    "rollover": row.rollover,
                     "firmware_version": firmware_versions[idx],
                 }
             )
