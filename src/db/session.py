@@ -4,7 +4,6 @@ from typing import Generator
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from common.exceptions import DatabaseOperationError
 from common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -28,7 +27,8 @@ def build_engine(db_url: str, verbose: bool = False):
         )
         return engine
     except Exception as e:
-        raise DatabaseOperationError(f"Failed to connect to the database: {db_url}") from e
+        logger.error(f"Failed to create database engine for URL: {db_url}")
+        raise
 
 
 def init_db(db_url: str, log_level: str = "INFO") -> sessionmaker:
@@ -60,7 +60,7 @@ def get_db_session(session_factory: sessionmaker) -> Generator[Session, None, No
         yield session
         session.commit()
     except Exception as e:
+        logger.error(f"Database operation failed: {e}. Rolling back transaction.")
         session.rollback()
-        raise DatabaseOperationError("Database operation failed, rolled back.") from e
     finally:
         session.close()
