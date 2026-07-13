@@ -22,12 +22,20 @@ def extract_date(path: Path) -> date | None:
     """
     Extract the date from the file path using a regex pattern.
     """
-    _DATE_PATTERN = re.compile(r"\b\d{2,4}-\d{2}-\d{2,4}\b")
+    _DATE_PATTERN = re.compile(
+        r"(?<!\d)(?:"
+        r"(?:\d{4}|\d{2})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"  # YYYY-MM-DD / YY-MM-DD
+        r"|"
+        r"(?:0[1-9]|[12]\d|3[01])-(?:0[1-9]|1[0-2])-(?:\d{4}|\d{2})"  # DD-MM-YYYY / DD-MM-YY
+        r")(?!\d)"
+    )
+    
+    # Note: the following formats are ordered according a precedence rule
     _DATE_FORMATS = (
         "%Y-%m-%d",  # YYYY-MM-DD
-        "%y-%m-%d",  # YY-MM-DD
         "%d-%m-%Y",  # DD-MM-YYYY
         "%d-%m-%y",  # DD-MM-YY
+        "%y-%m-%d",  # YY-MM-DD
     )
     match = _DATE_PATTERN.search(str(path))
     
