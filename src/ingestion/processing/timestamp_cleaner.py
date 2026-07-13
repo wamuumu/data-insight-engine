@@ -8,6 +8,7 @@ from scipy.optimize import isotonic_regression
 import pandas as pd
 
 from common.constants import EventID
+from common.exceptions import TimestampCleaningError
 from common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -159,7 +160,7 @@ def _parse_datetime(df: pd.DataFrame):
         dt = pd.to_datetime(df["date"] + " " + df["time"], dayfirst=True, format="%d/%m/%Y %H:%M:%S.%f")
         df["datetime"] = dt
     except Exception as e:
-        raise ValueError("Failed to parse 'date' and 'time' columns into datetime.") from e
+        raise TimestampCleaningError("Failed to parse 'date' and 'time' columns into datetime.") from e
 
 
 def _strictly_increasing(values: list[float]) -> list[int]:
@@ -203,10 +204,10 @@ def _detect_rollover(df: pd.DataFrame) -> int | None:
     hl_rows = df[df["event_id"] == EventID.HL_DOWNLOAD]
 
     if hl_rows.empty:
-        raise LookupError("No HL Download event found in logs, impossible state.")
+        raise TimestampCleaningError("No HL Download event found in logs, impossible to determine rollover.")
     
     if hl_rows["datetime"].dt.year.eq(_EPOCH_YEAR).any():
-        raise ValueError("HL Download event has epoch-year timestamp, cannot determine rollover.")
+        raise TimestampCleaningError("Epoch-year HL Download event found, impossible to determine rollover.")
 
     # Deterministic tie-break
     ordered = hl_rows.sort_values(by="datetime", ascending=False, kind="stable")
@@ -388,7 +389,7 @@ def _resolve_and_shift(df: pd.DataFrame, windows: list[Window]):
         else:
             reference_dt = next_chain_reference_dt
             if reference_dt is None:
-                raise RuntimeError("Cannot resolve unguessable window: no reference datetime available.")
+                raise TimestampCleaningError(f"Cannot resolve unguessable window ({win.start_idx}-{win.end_idx}): no reference datetime available.")
 
         last_dt = df.at[win.end_idx, "datetime"]
         delta = reference_dt - last_dt - _TIMEDELTA_OFFSET_MILLIS
@@ -617,15 +618,12 @@ def _compute_tssc(df: pd.DataFrame):
             session_start_dt = dt
 
         if session_start_dt is None:
-            raise RuntimeError("Cannot compute TSSC: no session start event found before row.")
+            raise TimestampCleaningError(f"Cannot compute TSSC for row index {i}: missing session start datetime.")
 
         tssc = int((session_start_dt - _TSSC_TIMESTAMP_ANCHOR).total_seconds() * 1000) + counter
         tssc_values.append(tssc)
 
     df["tssc"] = tssc_values
-
-    if df["tssc"].isnull().any():
-        raise AssertionError("TSSC computation failed: some rows have NaN TSSC values.")
 
 
 def _repair_sentinel_tssc(df: pd.DataFrame):

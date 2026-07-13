@@ -34,19 +34,6 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         )
         return result.rowcount or 0
 
-    def get_latest_log_by_device(
-        self, session: Session, device_id: int
-    ) -> HistoryLog | None:
-        """
-        Retrieve the latest history log record associated with a specific device.
-        """
-        return (
-            session.query(HistoryLog)
-            .filter(HistoryLog.device_id == device_id)
-            .order_by(HistoryLog.event_ts.desc())
-            .first()
-        )
-
     def delete_history_logs_by_file(self, session: Session, source_file_id: int) -> int:
         """
         Delete history log records associated with a specific source file. Returns the number of records deleted.

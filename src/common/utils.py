@@ -1,17 +1,21 @@
 import re
 import hashlib
 from pathlib import Path
-from datetime import datetime, date, time, timezone
+from datetime import datetime, date
+
+from common.exceptions import PipelineError
 
 
-def extract_serial_number(path: Path) -> str | None:
+def extract_serial_number(path: Path) -> str:
     """
     Extract the serial number from the file path using a regex pattern.
     The serial number is expected to be in the format 'B' followed by 8 hexadecimal characters.
     """
     _SN_PATTERN = re.compile(r"(B[0-9A-F]{8})")
     match = _SN_PATTERN.search(str(path))
-    return match.group() if match else None
+    if not match:
+        raise PipelineError(f"Failed to extract serial number from path: {path}")
+    return match.group()
 
 
 def extract_date(path: Path) -> date | None:
@@ -41,7 +45,7 @@ def extract_date(path: Path) -> date | None:
     return None
 
 
-def compute_sha256(path: Path) -> bytes | None:
+def compute_sha256(path: Path) -> bytes:
     """
     Compute the SHA-256 hash of the file at the given path.
     Returns raw bytes of the hash (32 bytes).
@@ -53,5 +57,5 @@ def compute_sha256(path: Path) -> bytes | None:
             while chunk := f.read(_CHUNK):
                 sha256_hash.update(chunk)
         return sha256_hash.digest()
-    except OSError:
-        return None
+    except OSError as e:
+        raise PipelineError(f"Failed to read file for hashing: {path}") from e

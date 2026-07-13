@@ -85,5 +85,8 @@ def _on_job_executed(event):
 
 def _on_job_error(event):
     logger.error(
-        "Scheduled job failed", job_id=event.job_id, error=str(event.exception)
+        "Scheduled job failed", 
+        job_id=event.job_id, 
+        error=str(event.exception),
+        traceback=event.traceback
     )

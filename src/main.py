@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 from prometheus_client import start_http_server
@@ -121,13 +122,20 @@ def handle_scheduler(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
+    
     # Build and parse command-line arguments
     arg_parser = build_parser()
     args = arg_parser.parse_args()
+    
+    try:
+        # Start Prometheus metrics server
+        start_http_server(settings.metrics_port)
+        logger.info("Prometheus metrics server started", port=str(settings.metrics_port))
 
-    # Start Prometheus metrics server
-    start_http_server(settings.metrics_port)
-    logger.info("Prometheus metrics server started", port=str(settings.metrics_port))
+        # Run the appropriate command handler
+        args.func(args)
 
-    # Run the appropriate command handler
-    args.func(args)
+    except Exception:
+        logger.critical("Unexpected application failure, exiting.", command=args.command, exc_info=True)
+        sys.exit(1)
+        

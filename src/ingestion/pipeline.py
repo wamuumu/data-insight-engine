@@ -10,6 +10,7 @@ import threading
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from common.exceptions import FileProcessingError, InfrastructureError, QuarantineFailure
 from common.logging import get_logger
 from common.utils import compute_sha256, extract_serial_number, extract_date
 from config import load_settings
@@ -127,15 +128,36 @@ class IngestionPipeline:
                     files=len(files),
                 )
                 for file in files:
-                    stats.merge(self._process_one(file))
+                    try:
+                        stats.merge(self._process_one(file))
+                    except InfrastructureError:
+                        logger.error(
+                            "Infrastructure error encountered during file processing, aborting remainder of run.",
+                            file_path=str(file.path),
+                            remaining_files=len(files) - files.index(file) - 1,
+                            exc_info=True,
+                        )
+                        break  # Stop processing further files on infrastructure error
             else:
                 # Multi-thread multi-file
                 with ThreadPoolExecutor(max_workers=settings.workers) as executor:
-                    futures = [
-                        executor.submit(self._process_one, file) for file in files
-                    ]
-                    for future in as_completed(futures):
-                        local_stats = future.result()
+                    futures_to_file = {
+                        executor.submit(self._process_one, file): file for file in files
+                    }
+                    aborted = False
+                    for future in as_completed(futures_to_file):
+                        file = futures_to_file[future]
+                        try:
+                            local_stats = future.result()
+                        except InfrastructureError:
+                            logger.error(
+                                "Infrastructure error in worker thread, aborting run.",
+                                file_path=str(file.path),
+                                exc_info=True,
+                            )
+                            aborted = True
+                            continue
+
                         if local_stats:
                             logger.debug(
                                 "File processing completed in thread.",
@@ -146,10 +168,14 @@ class IngestionPipeline:
                             logger.warning(
                                 "File processing returned no stats in thread."
                             )
+                    if aborted:
+                        logger.warning(
+                            "Run completed with at least one infrastructure error; some files may not have been processed."
+                        )
 
             logger.info("Pipeline run completed", **stats.to_dict(suffix="total"))
-
             return stats
+        
         finally:
             pipeline_active.set(0)
             pipeline_last_run.set_to_current_time()
@@ -178,94 +204,73 @@ class IngestionPipeline:
         structlog.contextvars.clear_contextvars()
         if not hasattr(_worker_local, "worker_id"):
             _worker_local.worker_id = next(_worker_counter)
-        structlog.contextvars.bind_contextvars(worker_id=_worker_local.worker_id)
+        structlog.contextvars.bind_contextvars(
+            worker_id=_worker_local.worker_id,
+            file_path=str(file.path),
+        )
 
         stats = PipelineStats(files_discovered=1)
-
-        parser = get_parser(file)
-        if not parser:
-            logger.info("No parser found for file, skipping", file_path=str(file.path))
-            stats.files_skipped += 1
-            return stats
-
-        sn = extract_serial_number(file.path)
-        if sn is None:
-            logger.error(
-                "Could not extract serial number from file path, skipping",
-                file_path=str(file.path),
-            )
-            stats.files_failed += 1
-            return stats
-        
-        date = extract_date(file.path)
-        if date is None:
-            logger.warning(
-                "Could not extract date from file path, proceeding without date context",
-                file_path=str(file.path),
-            )
-
-        checksum = compute_sha256(file.path)
-        if checksum is None:
-            logger.error(
-                "Could not compute checksum for file, skipping",
-                file_path=str(file.path),
-            )
-            stats.files_failed += 1
-            return stats
-
-        if self._is_duplicate(checksum):
-            logger.info("Duplicate file found, skipping", file_path=str(file.path))
-            stats.files_duplicated += 1
-            files_processed.labels(
-                status=MetricStatus.DUPLICATE, file_type=file.file_type
-            ).inc()
-            return stats
-
-        device_id: int = -1
         file_tracker_id: int = -1
-        prev_file_tracker_id: int | None = None
 
-        if not self.dry_run:
+        try:
+            parser = get_parser(file)
 
-            def _prepare(session):
-                device = self.device_repo.get_device_by_serial_number(session, sn)
-                if device is None:
-                    device = self.device_repo.create_device(session, sn)
-                    logger.debug(
-                        "Created new device record",
-                        serial_number=sn,
-                        device_id=device.id,
-                    )
+            sn = extract_serial_number(file.path)
+        
+            date = extract_date(file.path)
+            if date is None:
+                logger.warning(
+                    "Could not extract date from file path, proceeding without date context.",
+                    file_path=str(file.path),
+                )
+
+            checksum = compute_sha256(file.path)       
+
+            if self._is_duplicate(checksum):
+                logger.info("Duplicate file found, skipping.")
+                stats.files_duplicated += 1
+                files_processed.labels(
+                    status=MetricStatus.DUPLICATE, file_type=file.file_type
+                ).inc()
+                return stats
+
+            device_id: int = -1
+
+            if not self.dry_run:
+
+                def _prepare(session):
+                    device = self.device_repo.get_device_by_serial_number(session, sn)
+                    if device is None:
+                        device = self.device_repo.create_device(session, sn)
+                        logger.debug(
+                            "Created new device record",
+                            serial_number=sn,
+                            device_id=device.id,
+                        )
                     
-                prev_id = None
-                if file.file_type == FileType.HISTORY_LOG:
-                    last_log = self.history_log_repo.get_latest_log_by_device(session, device.id)
-                    prev_id = last_log.source_file_id if last_log else None
+                    file_tracker = self.file_tracker_repo.get_file_tracker_by_checksum(session, checksum)
+                    if file_tracker is None:
+                        file_tracker = self.file_tracker_repo.create_file_tracker(
+                            session, str(file.path), checksum, date
+                        )
+                        logger.debug(
+                            "Created new file tracker record",
+                            file_path=str(file.path),
+                            file_tracker_id=file_tracker.id,
+                        )
+                    
+                    self.file_tracker_repo.mark_processing(session, file_tracker.id)
+                    return device.id, file_tracker.id
                 
-                file_tracker = self.file_tracker_repo.get_file_tracker_by_checksum(session, checksum)
-                if file_tracker is None:
-                    file_tracker = self.file_tracker_repo.create_file_tracker(
-                        session, str(file.path), checksum, date
-                    )
-                    logger.debug(
-                        "Created new file tracker record",
-                        file_path=str(file.path),
-                        file_tracker_id=file_tracker.id,
-                    )
-                
-                self.file_tracker_repo.mark_processing(session, file_tracker.id)
-                return device.id, file_tracker.id, prev_id
-            
-            device_id, file_tracker_id, prev_file_tracker_id = with_db_retry(
-                self.session_factory,
-                _prepare,
-                op_name="prepare_file_processing",
-            )
+                device_id, file_tracker_id = with_db_retry(
+                    self.session_factory,
+                    _prepare,
+                    op_name="prepare_file_processing",
+                )
 
-        with file_processing_duration.labels(file_type=file.file_type).time():
-            try:
+            with file_processing_duration.labels(file_type=file.file_type).time():
                 inserted, produced, is_complete = self._stream_file(
-                    file, parser, device_id, file_tracker_id, prev_file_tracker_id
+                    file, parser, device_id, file_tracker_id
                 )
                 stats.files_parsed += 1
                 stats.records_produced += produced
@@ -295,14 +300,29 @@ class IngestionPipeline:
                         f"Incomplete record insertion: produced={produced}, inserted={inserted}",
                     )
 
-            except Exception as e:
-                stats.files_failed += 1
-                files_processed.labels(
-                    status=MetricStatus.FAILURE, file_type=file.file_type
-                ).inc()
-                self._quarantine_file(file_tracker_id, file.file_type, str(e))
+        except InfrastructureError:
+            logger.error("Infrastructure error while processing file.", exc_info=True)
+            raise
 
-        structlog.contextvars.clear_contextvars()
+        except FileProcessingError as e:
+            stats.files_failed += 1
+            files_processed.labels(
+                status=MetricStatus.FAILURE, file_type=file.file_type
+            ).inc()
+            logger.error("File processing failed, quarantining.", exc_info=True)
+            self._quarantine_file(file_tracker_id, file.file_type, str(e))
+
+        except Exception as e:
+            stats.files_failed += 1
+            files_processed.labels(
+                status=MetricStatus.FAILURE, file_type=file.file_type
+            ).inc()
+            logger.error("Unexpected error while processing file, quarantining.", exc_info=True)
+            self._quarantine_file(file_tracker_id, file.file_type, str(e))
+
+        finally:
+            structlog.contextvars.clear_contextvars()
+        
         return stats
 
 
@@ -312,7 +332,7 @@ class IngestionPipeline:
         """
         if self.dry_run:
             logger.debug(
-                "Dry run enabled - skipping quarantine.",
+                "Dry run enabled, skipping quarantine.",
                 reason=reason,
             )
             return
@@ -352,11 +372,12 @@ class IngestionPipeline:
 
         except Exception as e:
             logger.error(
-                "Failed to mark file as failed in quarantine, exiting process to avoid further issues",
+                "Failed to mark file as failed during quarantine.",
                 file_tracker_id=file_tracker_id,
-                error=str(e),
+                original_reason=reason,
+                exc_info=True,
             )
-            exit(1)  # Exit the process to avoid further processing of potentially corrupted data
+            raise QuarantineFailure(f"Could not quarantine file_tracker_id={file_tracker_id}") from e
 
 
     def _is_duplicate(self, checksum: bytes) -> bool:
@@ -366,20 +387,16 @@ class IngestionPipeline:
         if self.dry_run:
             return False  # Don't skip any files in dry run mode
 
-        try:
-            return with_db_retry(
-                self.session_factory,
-                lambda session: session.execute(
-                    select(FileTracker.id).where(
-                        FileTracker.checksum_sha256 == checksum,
-                        FileTracker.status == FileStatus.DONE,
-                    )
-                ).first() is not None,
-                op_name="check_duplicate_file",
-            ) 
-        except Exception as e:
-            logger.error("Error checking for duplicate file in database", error=str(e))
-            return True  # Treat as duplicate to avoid reprocessing in case of DB error
+        return with_db_retry(
+            self.session_factory,
+            lambda session: session.execute(
+                select(FileTracker.id).where(
+                    FileTracker.checksum_sha256 == checksum,
+                    FileTracker.status == FileStatus.DONE,
+                )
+            ).first() is not None,
+            op_name="check_duplicate_file",
+        )
 
 
     def _stream_file(
@@ -388,7 +405,6 @@ class IngestionPipeline:
         parser: BaseParser,
         device_id: int,
         source_file_id: int,
-        prev_source_file_id: int | None = None,
     ) -> tuple[int, int, bool]:
         """
         Parse a file in source order and persist records atomically in batches.
@@ -397,60 +413,31 @@ class IngestionPipeline:
         total_produced = 0
         batch: list[HistoryLogRecord] | list[SpecialEventRecord] = []
 
-        parsed = parser.parse(file)
+        records = parser.parse(file)
 
-        if isinstance(parsed, SpecialEventRecord):
+        if isinstance(records, SpecialEventRecord):
             total_produced += 1
-            batch = [parsed]
+            batch = [records]
 
             total_inserted += self._persist_batch(
                 batch, device_id, source_file_id
             )
 
         else:
-            hl_records = parsed.records
-            rollover_index = parsed.rollover_index
 
-            if not hl_records:
-                logger.warning("No records produced by parser.", file_path=str(file.path))
-                return (0, 0, False)
-
-            current_file_id = prev_source_file_id or source_file_id
-
-            for idx, record in enumerate(hl_records):
-                is_rollover_boundary = (
-                    rollover_index is not None
-                    and idx == rollover_index
-                    and prev_source_file_id is not None
-                )
-
-                if is_rollover_boundary:
-                    if batch:
-                        logger.debug(
-                            "Splitting batch due to rollover detection",
-                            rollover_index=idx,
-                            batch_size=len(batch),
-                            source_file_id=prev_source_file_id,
-                        )
-                        total_inserted += self._persist_batch(
-                            batch, device_id, current_file_id
-                        )
-                        batch.clear()
-
-                    current_file_id = source_file_id
-
+            for record in records:
                 total_produced += 1
                 batch.append(record)
 
                 if len(batch) >= settings.db_batch_size:
                     total_inserted += self._persist_batch(
-                        batch, device_id, current_file_id
+                        batch, device_id, source_file_id
                     )
                     batch.clear()
 
             if batch:
                 total_inserted += self._persist_batch(
-                    batch, device_id, current_file_id
+                    batch, device_id, source_file_id
                 )
 
         return (total_inserted, total_produced, total_inserted == total_produced)
@@ -469,20 +456,16 @@ class IngestionPipeline:
             return 0
 
         if self.dry_run:
-            logger.debug("Dry run enabled - skipping DB insert.", skipped=len(batch))
+            logger.debug("Dry run enabled, skipping DB insert.", skipped=len(batch))
             return len(batch)
         
-        try:
-            return with_db_retry(
-                self.session_factory,
-                lambda session: self._insert_batch_in_transaction(
-                    session, batch, device_id, source_file_id
-                ),
-                op_name="persist_batch",
-            )
-        except Exception as e:
-            logger.error("Giving up on batch persistence.", error=str(e))
-            return 0
+        return with_db_retry(
+            self.session_factory,
+            lambda session: self._insert_batch_in_transaction(
+                session, batch, device_id, source_file_id
+            ),
+            op_name="persist_batch",
+        )
 
 
     def _insert_batch_in_transaction(

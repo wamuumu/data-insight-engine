@@ -4,6 +4,7 @@ from typing import Callable
 import pandas as pd
 
 from common.constants import EventID
+from common.exceptions import FirmwareLookupError
 from common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -25,12 +26,15 @@ def _build_firmware_index(df: pd.DataFrame) -> list[tuple[int, int, int]]:
     switch_events: list[tuple[int, int, int]] = []
 
     if "event_id" not in df.columns or "value" not in df.columns:
-        raise ValueError("DataFrame must contain 'event_id' and 'value' columns to build firmware index.")
+        raise FirmwareLookupError("DataFrame must contain 'event_id' and 'value' columns to build firmware index.")
 
     for abs_row_index, row in enumerate(df.itertuples(index=False)):
         
-        event_id = int(row.event_id)
-        firmware_value = int(row.value)
+        try:
+            event_id = int(row.event_id)
+            firmware_value = int(row.value)
+        except (ValueError, TypeError) as e:
+            raise FirmwareLookupError(f"Invalid data in row {abs_row_index}: event_id={row.event_id}, value={row.value}") from e
 
         if event_id not in _BOUNDARY_EVENT_IDS:
             continue

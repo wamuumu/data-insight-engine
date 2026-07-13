@@ -16,12 +16,15 @@ class DriveCrawler(BaseCrawler):
 
     def __init__(self, root_path: Path):
         logger.debug("Initializing DriveCrawler", root_path=str(root_path))
+        
         if not root_path.exists():
             logger.error("Root path does not exist", root_path=str(root_path))
             raise FileNotFoundError(f"Root path {root_path} does not exist.")
+        
         if not root_path.is_dir():
             logger.error("Root path is not a directory", root_path=str(root_path))
             raise NotADirectoryError(f"Root path {root_path} is not a directory.")
+        
         self.root = root_path
 
     def crawl(self) -> Iterator[BaseFile]:

@@ -6,6 +6,7 @@ from typing import Callable, TypeVar
 import sqlalchemy.exc as sql_exc
 from sqlalchemy.orm import Session, sessionmaker
 
+from common.exceptions import DatabaseRetryTimeout
 from common.logging import get_logger
 from config import load_settings
 from db.session import get_db_session
@@ -22,10 +23,6 @@ _NON_RETRYABLE_ERRORS = (
     sql_exc.ProgrammingError,
     sql_exc.StatementError,
 )
-
-
-class DbRetryTimeout(RuntimeError):
-    """The retry deadline was reached before the operation succeeded."""
 
 
 def with_db_retry(
@@ -46,7 +43,8 @@ def with_db_retry(
         The return value of the provided function `fn`.
 
     Raises:
-        DbRetryTimeout: deadline reached before a successful attempt.
+        DatabaseRetryTimeout: deadline reached before a successful attempt.
+        sqlalchemy.exc.*: any non-retryable SQLAlchemy exception raised by the operation.
     """
     deadline = monotonic() + settings.db_retry_timeout
 
@@ -70,7 +68,7 @@ def with_db_retry(
             )
 
             if monotonic() + delay >= deadline:
-                raise DbRetryTimeout(op_name) from e
+                raise DatabaseRetryTimeout(f"{op_name} did not succeed withing {settings.db_retry_timeout} seconds (attempt {attempt}).") from e
 
             sleep(delay)
             attempt += 1

@@ -1,7 +1,10 @@
 from pathlib import Path
 
 from pydantic import Field, field_validator
+from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from common.exceptions import ConfigurationError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -88,6 +91,5 @@ def load_settings() -> Settings:
     """
     try:
         return Settings()
-    except Exception as e:
-        print(f"Error loading settings: {e}")
-        exit(1)
+    except ValidationError as e:
+        raise ConfigurationError("Failed to load configuration values") from e

@@ -1,6 +1,7 @@
 import pandas as pd
 
 from common.constants import PARQUET_DROP_COLUMNS
+from common.exceptions import ParsingError
 from common.logging import get_logger
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, SpecialEventRecord
@@ -51,10 +52,13 @@ class ParquetParser(BaseParser):
             size_mb=round(file.size / 1e6, 2),
         )
 
-        df = pd.read_parquet(file.path, engine="pyarrow")
+        try:
+            df = pd.read_parquet(file.path, engine="pyarrow")
+        except Exception as e:
+            raise ParsingError(f"Failed to read Parquet file: {file.path}") from e
 
         if df.empty:
-            raise ValueError("Parquet file has no data rows.")
+            raise ParsingError(f"Parquet file has no data rows: {file.path}")
 
         logger.debug(
             "Parquet file opened successfully",
@@ -67,7 +71,10 @@ class ParquetParser(BaseParser):
             columns=_HEADER_MAPPING
         )[list(_HEADER_MAPPING.values())]
 
-        statistics = compute_event_statistics(df)
+        try:
+            statistics = compute_event_statistics(df)
+        except Exception as e:
+            raise ParsingError(f"Failed to compute event statistics for Parquet file: {file.path}") from e
 
         logger.debug(
             "Special event statistics computed", num_statistics=len(statistics)

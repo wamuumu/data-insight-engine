@@ -3,6 +3,7 @@ from typing import Iterator
 import pandas as pd
 
 from common.logging import get_logger
+from common.exceptions import FirmwareLookupError, ParsingError, TimestampCleaningError
 from ingestion.crawler.base import BaseFile
 from ingestion.parsers.base import BaseParser, HistoryLogRecord
 from ingestion.processing.timestamp_cleaner import clean_timestamps
@@ -34,14 +35,21 @@ class XLSXParser(BaseParser):
             size_mb=round(file.size / 1e6, 2)
         )
 
-        df = pd.read_excel(
-            file.path, sheet_name=0, header=0, names=_COLUMNS, engine="openpyxl"
-        )
+        try:
+            df = pd.read_excel(
+                file.path, 
+                sheet_name=0, 
+                header=0, 
+                names=_COLUMNS, 
+                engine="openpyxl"
+            )
+        except Exception as e:
+            raise ParsingError(f"Failed to read XLSX file: {file.path}") from e
 
         df = df.dropna(how="all")  # Drop rows where all elements are NaN
 
         if df.empty:
-            raise ValueError("XLSX file has no data rows.")
+            raise ParsingError(f"XLSX file has no data rows: {file.path}")
 
         logger.debug(
             "XLSX file opened successfully",
@@ -50,7 +58,12 @@ class XLSXParser(BaseParser):
             columns=list(df.columns),
         )
 
-        cleaned_records = clean_timestamps(df)
+        try:
+            cleaned_records = clean_timestamps(df)
+        except TimestampCleaningError:
+            raise
+        except Exception as e:
+            raise TimestampCleaningError(f"Failed to clean timestamps in XLSX file: {file.path}") from e
 
         logger.info(
             "Timestamps cleaning completed",
@@ -58,12 +71,17 @@ class XLSXParser(BaseParser):
             num_cleaned_records=len(cleaned_records),
             diff=len(cleaned_records) - len(df),
         )
-
-        firmware_lookup = build_firmware_lookup(cleaned_records)
-        firmware_versions = [firmware_lookup(idx) for idx in range(len(cleaned_records))]
-
+        
+        try:
+            firmware_lookup = build_firmware_lookup(cleaned_records)
+            firmware_versions = [firmware_lookup(idx) for idx in range(len(cleaned_records))]
+        except FirmwareLookupError:
+            raise
+        except Exception as e:
+            raise FirmwareLookupError(f"Failed to lookup firmware versions in XLSX file: {file.path}") from e
+        
         if any(fv is None for fv in firmware_versions):
-            raise ValueError("Firmware version lookup failed for some records.")
+            raise FirmwareLookupError(f"Firmware version lookup failed for some records in XLSX file: {file.path}")
         
         logger.info("Firmware version lookup completed", num_lookups=len(firmware_versions))
 

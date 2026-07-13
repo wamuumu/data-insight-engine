@@ -7,7 +7,7 @@ class HistoryLogRecord:
     Container for a history log record.
     """
 
-    __slots__ = ["source_file", "data", "is_rollover"]
+    __slots__ = ["source_file", "data"]
 
     def __init__(
         self, source_file: str, data: dict[str, Any]
