@@ -39,8 +39,10 @@ class InfrastructureError(ApplicationError):
 class ConfigurationError(InfrastructureError):
     """The application configuration is invalid or incomplete."""
 
+
 class DatabaseOperationError(InfrastructureError):
     """The application could not perform a database operation."""
+
 
 class DatabaseRetryTimeout(InfrastructureError):
     """The retry deadline was reached before a database operation succeeded."""
