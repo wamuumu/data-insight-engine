@@ -89,10 +89,10 @@ class XLSXParser(BaseParser):
             yield HistoryLogRecord(
                 source_file=str(file.path),
                 data={
+                    "firmware_version": firmware_versions[idx],
                     "datetime": row.datetime,
                     "event_id": row.event_id,
                     "value": row.value,
                     "tssc": row.tssc,
-                    "firmware_version": firmware_versions[idx],
                 }
             )

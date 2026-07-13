@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -15,7 +15,11 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
     def __init__(self):
         super().__init__(FileTracker)
 
-    def is_already_processed(self, session: Session, checksum: bytes) -> bool:
+    def is_already_processed(
+        self, 
+        session: Session, 
+        checksum: bytes
+    ) -> bool:
         """
         Check if a file with the given checksum has already been processed.
         """
@@ -27,17 +31,22 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
         return result is not None
 
     def get_file_tracker_by_checksum(
-        self, session: Session, checksum: bytes
+        self, 
+        session: Session, 
+        checksum: bytes
     ) -> FileTracker | None:
         """
         Retrieve a FileTracker record by its checksum.
         """
         stmt = select(FileTracker).where(FileTracker.checksum_sha256 == checksum)
-        result = session.execute(stmt).scalar_one_or_none()
-        return result
+        return session.execute(stmt).scalar_one_or_none()
 
     def create_file_tracker(
-        self, session: Session, file_path: str, checksum_sha256: bytes, date: date | None = None
+        self, 
+        session: Session, 
+        file_path: str, 
+        checksum_sha256: bytes, 
+        date: date | None = None
     ) -> FileTracker:
         """
         Insert a new FileTracker record into the database with status 'pending' and return the created record.
@@ -53,45 +62,68 @@ class FileTrackerRepository(BaseRepository[FileTracker]):
             .on_conflict_do_nothing(constraint="uq_file_tracker_checksum")
             .returning(FileTracker)
         )
-        result = session.execute(stmt).scalar_one_or_none()
+        return session.execute(stmt).scalar_one_or_none()
 
-        if result is None:
-            # If the record already exists, fetch it
-            result = self.get_file_tracker_by_checksum(session, checksum_sha256)
-
-        return result
-
-    def mark_processing(self, session: Session, tracker_id: int):
+    def mark_processing(self, session: Session, tracker_id: int) -> FileTracker:
         """
         Update the given FileTracker record to mark it as 'processing' and set the started_at timestamp.
         """
-        tracker = session.get(FileTracker, tracker_id)
-        tracker.status = FileStatus.PROCESSING
-        logger.info("File processing started", file_path=tracker.file_path)
-        session.flush()
+        return self._transition(
+            session,
+            tracker_id,
+            FileStatus.PROCESSING,
+            started_at=datetime.now(timezone.utc)
+        )
 
-    def mark_done(self, session: Session, tracker_id: int, rows_inserted: int):
+    def mark_done(self, session: Session, tracker_id: int, rows_inserted: int) -> FileTracker:
         """
         Update the given FileTracker record to mark it as 'done', set the finished_at timestamp, and update row counts.
         """
-        tracker = session.get(FileTracker, tracker_id)
-        tracker.status = FileStatus.DONE
-        logger.info(
-            "File processing completed",
-            file_path=tracker.file_path,
-            rows_inserted=rows_inserted,
+        return self._transition(
+            session,
+            tracker_id,
+            FileStatus.DONE,
+            finished_at=datetime.now(timezone.utc),
+            rows_inserted=rows_inserted
         )
-        session.flush()
 
-    def mark_failed(self, session: Session, tracker_id: int, error_message: str):
+    def mark_failed(self, session: Session, tracker_id: int, error_message: str) -> FileTracker:
         """
         Update the given FileTracker record to mark it as 'failed', set the finished_at timestamp, and record the error message.
         """
-        tracker = session.get(FileTracker, tracker_id)
-        tracker.status = FileStatus.FAILED
-        logger.error(
-            "File processing failed",
-            file_path=tracker.file_path,
-            error_message=error_message,
+        return self._transition(
+            session,
+            tracker_id,
+            FileStatus.FAILED,
+            finished_at=datetime.now(timezone.utc),
+            last_error=error_message
         )
+    
+    def _transition(
+        self,
+        session: Session,
+        tracker_id: int,
+        status: FileStatus,
+        **fields,
+    ) -> FileTracker:
+        """
+        Internal method to transition a FileTracker record to a new status and update additional fields.
+        """
+        tracker = session.get(FileTracker, tracker_id)
+        
+        if tracker is None:
+            raise LookupError(f"No FileTracker found for id={tracker_id}")
+        
+        tracker.status = status
+        for field, value in fields.items():
+            setattr(tracker, field, value)
+        
+        logger.info(
+            "File tracker status updated",
+            file_path=tracker.file_path,
+            status=status,
+            **{k: v for k, v in fields.items() if k != "last_error"}
+        )
+
         session.flush()
+        return tracker

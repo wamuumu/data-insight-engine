@@ -36,6 +36,7 @@ class HistoryLog(BaseModel):
     event_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_id: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     value: Mapped[int] = mapped_column(Integer, nullable=False)
+    tssc: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     # ── Lineage ─────────────────────────────────────────────────
     source_file_id: Mapped[int] = mapped_column(

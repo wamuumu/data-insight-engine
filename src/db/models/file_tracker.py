@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 
-from sqlalchemy import Integer, LargeBinary, String, Text, Date, UniqueConstraint
+from sqlalchemy import Integer, LargeBinary, String, Text, Date, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models.base import BaseModel
@@ -35,3 +35,7 @@ class FileTracker(BaseModel):
     status: Mapped[FileStatus] = mapped_column(
         String(16), nullable=False, default=FileStatus.PENDING
     )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rows_inserted: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

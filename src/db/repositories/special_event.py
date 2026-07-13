@@ -22,19 +22,24 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         source_file_id: int,
     ) -> int:
         """
-        Batch-insert special event records into the database. Returns the number of records successfully inserted.
+        Insert special event records into the database. Returns the number of records successfully inserted.
         """
         if not records:
             return 0
 
-        rows = [
-            self._special_event_to_row(r, device_id, source_file_id) for r in records
-        ]
-        result = session.execute(insert(SpecialEvent).values(rows))
-        return result.rowcount or 0
+        rows = [self._special_event_to_row(r, device_id, source_file_id) for r in records]
+        result = session.execute(
+            insert(SpecialEvent)
+            .values(rows)
+        )
+        inserted = max(result.rowcount, 0)
+
+        return inserted
 
     def delete_special_events_by_file(
-        self, session: Session, source_file_id: int
+        self, 
+        session: Session, 
+        source_file_id: int
     ) -> int:
         """
         Delete special event records associated with a specific source file. Returns the number of records deleted.
@@ -47,7 +52,10 @@ class SpecialEventRepository(BaseRepository[SpecialEvent]):
         return result
 
     def _special_event_to_row(
-        self, record: SpecialEventRecord, device_id: int, source_file_id: int
+        self, 
+        record: SpecialEventRecord, 
+        device_id: int, 
+        source_file_id: int
     ) -> dict:
         """
         Convert a SpecialEventRecord to a dictionary suitable for database insertion.

@@ -32,9 +32,15 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
             .values(rows)
             .on_conflict_do_nothing(constraint="uq_history_log_row")
         )
-        return result.rowcount or 0
+        inserted = max(result.rowcount, 0)
 
-    def delete_history_logs_by_file(self, session: Session, source_file_id: int) -> int:
+        return inserted
+
+    def delete_history_logs_by_file(
+        self, 
+        session: Session, 
+        source_file_id: int
+    ) -> int:
         """
         Delete history log records associated with a specific source file. Returns the number of records deleted.
         """
@@ -46,7 +52,10 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         return result
 
     def _history_log_to_row(
-        self, record: HistoryLogRecord, device_id: int, source_file_id: int
+        self, 
+        record: HistoryLogRecord, 
+        device_id: int, 
+        source_file_id: int
     ) -> dict:
         """
         Convert a HistoryLogRecord to a dictionary suitable for database insertion.
@@ -55,8 +64,9 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
         return {
             "device_id": device_id,
             "firmware_version": record.data.get("firmware_version"),
-            "event_ts": record.data.get("event_datetime"),
+            "event_ts": record.data.get("datetime"),
             "event_id": record.data.get("event_id"),
             "value": record.data.get("value"),
+            "tssc": record.data.get("tssc"),
             "source_file_id": source_file_id,
         }

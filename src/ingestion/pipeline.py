@@ -285,7 +285,7 @@ class IngestionPipeline:
                         with_db_retry(
                             self.session_factory,
                             lambda session: self.file_tracker_repo.mark_done(
-                                session, file_tracker_id, rows_inserted=inserted
+                                session, file_tracker_id, inserted
                             ),
                             op_name="mark_file_done",
                         )
@@ -346,7 +346,7 @@ class IngestionPipeline:
         try:
 
             if file_type == FileType.HISTORY_LOG:
-                with_db_retry(
+                deleted = with_db_retry(
                     self.session_factory,
                     lambda session: self.history_log_repo.delete_history_logs_by_file(
                         session, file_tracker_id
@@ -354,13 +354,19 @@ class IngestionPipeline:
                     op_name="delete_history_logs",
                 )
             else:
-                with_db_retry(
+                deleted = with_db_retry(
                     self.session_factory,
                     lambda session: self.special_event_repo.delete_special_events_by_file(
                         session, file_tracker_id
                     ),
                     op_name="delete_special_events",
                 )
+
+            logger.debug(
+                "Deleted records associated with quarantined file.",
+                file_tracker_id=file_tracker_id,
+                deleted_records=deleted,
+            )
 
             with_db_retry(
                 self.session_factory,
@@ -389,12 +395,7 @@ class IngestionPipeline:
 
         return with_db_retry(
             self.session_factory,
-            lambda session: session.execute(
-                select(FileTracker.id).where(
-                    FileTracker.checksum_sha256 == checksum,
-                    FileTracker.status == FileStatus.DONE,
-                )
-            ).first() is not None,
+            lambda session: self.file_tracker_repo.is_already_processed(session, checksum),
             op_name="check_duplicate_file",
         )
 

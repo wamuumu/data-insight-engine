@@ -27,6 +27,10 @@ def upgrade():
         sa.Column("date", sa.Date(), nullable=True),
         sa.Column("checksum_sha256", BYTEA(), nullable=False),
         sa.Column("status", sa.String(16), nullable=False, server_default="pending"),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("rows_inserted", sa.Integer(), nullable=True),
+        sa.Column("last_error", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("checksum_sha256", name="uq_file_tracker_checksum"),
     )
@@ -42,6 +46,7 @@ def upgrade():
         sa.Column("event_ts", sa.DateTime(timezone=True), nullable=False),
         sa.Column("event_id", sa.SmallInteger(), nullable=False),
         sa.Column("value", sa.Integer(), nullable=False),
+        sa.Column("tssc", sa.BigInteger(), nullable=False),
         sa.Column(
             "source_file_id",
             sa.Integer(),
