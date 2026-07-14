@@ -63,10 +63,6 @@ class HistoryLogRepository(BaseRepository[HistoryLog]):
 
         return {
             "device_id": device_id,
-            "firmware_version": record.data.get("firmware_version"),
-            "event_ts": record.data.get("datetime"),
-            "event_id": record.data.get("event_id"),
-            "value": record.data.get("value"),
-            "tssc": record.data.get("tssc"),
             "source_file_id": source_file_id,
+            **record.data,
         }

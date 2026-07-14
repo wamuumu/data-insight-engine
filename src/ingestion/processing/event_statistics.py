@@ -61,7 +61,7 @@ def _compute_pearson_correlation(
     if len(data1) != len(data2):
         raise ValueError("Input arrays must have the same length.")
     correlation = float(np.corrcoef(data1, data2)[0, 1])
-    return np.clip(correlation, -1.0, 1.0)  # Ensure the correlation is within [-1, 1]
+    return float(np.clip(correlation, -1.0, 1.0))  # Ensure the correlation is within [-1, 1]
 
 
 def _compute_total_angular_displacement_deg(
@@ -79,27 +79,7 @@ def _compute_zero_crossing(data: np.ndarray) -> int:
     centered = data - _compute_mean(data)
     signs = np.sign(centered)
     signs[signs == 0] = 1  # Treat zeros as positive to avoid false crossings
-    return np.count_nonzero(np.diff(signs))
-
-def _compute_peak_count_over_thresholds(
-    data: np.ndarray,
-    thresholds: list[float]
-) -> dict:
-    centered = data - _compute_mean(data)
-
-    signs = np.sign(centered)
-    signs[signs == 0] = 1  # Treat zeros as positive to
-    zero_crossings = np.flatnonzero(np.diff(signs)) + 1
-
-    bounds = np.r_[0, zero_crossings, len(centered)]
-
-    peaks = np.array([
-        np.max(np.abs(centered[bounds[i]:bounds[i+1]]))
-        for i in range(len(bounds) - 1)
-        if bounds[i] != bounds[i+1]
-    ])
-
-    return {t: int(np.sum(peaks >= t)) for t in thresholds}
+    return int(np.count_nonzero(np.diff(signs)))
 
 
 def compute_event_statistics(df: pd.DataFrame) -> dict:

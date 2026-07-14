@@ -67,11 +67,3 @@ def compute_sha256(path: Path) -> bytes:
         return sha256_hash.digest()
     except OSError as e:
         raise PipelineError(f"Failed to read file for hashing: {path}") from e
-
-
-def construct_time(hour: int, minute: int, second: int, centisecond: int) -> time:
-    """
-    Construct a datetime.time object from hour, minute, second, and centisecond components.
-    """
-    microsecond = min(max(centisecond, 0), 99) * 10_000
-    return time(hour=hour, minute=minute, second=second, microsecond=microsecond)
