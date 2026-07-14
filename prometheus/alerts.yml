@@ -1,5 +1,5 @@
 groups:
-  - name: data-insight-engine
+  - name: metis-alerts
     rules:
 
       # Fire if the pipeline has not completed a run in over 25 hours (90000 seconds)
